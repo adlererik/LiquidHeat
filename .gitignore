@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.liquidheat-install.json
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backups/
+dist/
+artifacts/
+docker-images-*.tar.gz
+IMAGE-SHA256SUMS

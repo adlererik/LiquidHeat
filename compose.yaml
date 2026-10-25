@@ -1,0 +1,96 @@
+name: liquidheat
+x-app: &app
+  build: .
+  image: liquidheat-app:1.0.0
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs: [/tmp:size=32m]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  networks: [analytics]
+  environment: &environment
+    DATABASE_URL: postgresql://heatmap:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/heatmap
+    BACKFILL_DAYS: ${BACKFILL_DAYS:-30}
+    OPENBLAS_NUM_THREADS: '1'
+    OMP_NUM_THREADS: '1'
+  logging: &logging
+    driver: json-file
+    options: {max-size: 5m, max-file: '2'}
+services:
+  db:
+    build: {context: ., dockerfile: database/Dockerfile}
+    image: liquidheat-timescale:2.19.3-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: heatmap
+      POSTGRES_DB: heatmap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TIMESCALEDB_TELEMETRY: 'off'
+    command: [postgres, -c, shared_preload_libraries=timescaledb, -c, timescaledb.license=apache, -c, shared_buffers=128MB, -c, work_mem=2MB, -c, maintenance_work_mem=32MB, -c, max_connections=20, -c, max_worker_processes=8, -c, timescaledb.max_background_workers=3, -c, max_parallel_workers=1, -c, max_wal_size=256MB, -c, log_min_duration_statement=2000]
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [analytics]
+    mem_limit: 512m
+    cpus: 0.60
+    pids_limit: 96
+    shm_size: 128m
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U heatmap -d heatmap]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+  engine:
+    <<: *app
+    mem_limit: 384m
+    cpus: 0.50
+    pids_limit: 64
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -m, app.health]
+      interval: 60s
+      timeout: 10s
+      start_period: 600s
+      retries: 5
+  api:
+    <<: *app
+    command: [uvicorn, app.api:app, --host, 0.0.0.0, --port, '8000', --workers, '1', --loop, uvloop, --limit-concurrency, '12', --timeout-keep-alive, '5']
+    mem_limit: 256m
+    cpus: 0.35
+    pids_limit: 48
+    depends_on:
+      db: {condition: service_healthy}
+      engine: {condition: service_started}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+  web:
+    build: {context: ., dockerfile: frontend/Dockerfile}
+    image: liquidheat-web:1.0.0
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=16m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [analytics]
+    ports: ["${BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-18443}:8080"]
+    mem_limit: 64m
+    cpus: 0.10
+    pids_limit: 32
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+volumes:
+  database:
+    labels: {org.liquidheat.storage: database}
+networks:
+  analytics:
+    labels: {org.liquidheat.network: analytics}
