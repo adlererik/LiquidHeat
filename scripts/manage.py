@@ -16,7 +16,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / '.liquidheat-install.json'
-IMAGES = ('liquidheat-app:1.0.0', 'liquidheat-web:1.0.0', 'liquidheat-timescale:2.19.3-pg16')
+IMAGES = ('liquidheat-app:1.1.0', 'liquidheat-web:1.1.0', 'liquidheat-timescale:2.19.3-pg16')
 
 
 def run(args, **kw):

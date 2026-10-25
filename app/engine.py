@@ -6,6 +6,7 @@ import numpy as np
 import aiohttp
 from app import db
 from app import learning
+from app import hyperliquid
 from app.config import BACKFILL_DAYS, EXCHANGES, LEVERAGES, VERSION
 from app.exchanges import Adapter
 from app.model import State, WEIGHTS, encode_array, calibration_proposal
@@ -230,7 +231,7 @@ async def maintenance(p):
         # Apache-only core supports drop_chunks; proprietary policies/compression are absent.
         for table,age in [('candles','35 days'),('open_interest','35 days'),('funding_ratios','35 days'),
                           ('aggregate_trades','6 hours'),('volume_profiles','35 days'),('observed_liquidations','35 days'),
-                          ('heatmap_snapshots','35 days'),('leverage_tier_exposure','35 days'),('clld_history','35 days')]:
+                          ('hl_snapshots','35 days'),('heatmap_snapshots','35 days'),('leverage_tier_exposure','35 days'),('clld_history','35 days')]:
             await p.execute('SELECT drop_chunks($1::regclass,older_than=>$2::interval)',table,__import__('datetime').timedelta(hours=6) if age=='6 hours' else __import__('datetime').timedelta(days=35))
         await p.execute("DELETE FROM stream_events WHERE ts<now()-interval '10 minutes'")
         await p.execute("DELETE FROM calibration_history WHERE ts<now()-interval '35 days'")
@@ -265,6 +266,7 @@ async def main():
             tasks.extend([h,asyncio.create_task(minute_history(a,h)),asyncio.create_task(poll(a)),asyncio.create_task(a.stream()),asyncio.create_task(model_loop(p,a,h))])
         tasks.append(asyncio.create_task(maintenance(p)))
         tasks.append(asyncio.create_task(learning.loop(p)))
+        tasks.append(asyncio.create_task(hyperliquid.loop(p)))
         try:
             await asyncio.gather(*tasks)
         finally:

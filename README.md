@@ -4,7 +4,7 @@
 
 **See where Bitcoin leverage may be vulnerable. Keep the data on your own server.**
 
-Live BTC perpetual liquidation heatmaps · Three exchanges · Audited prospective learning
+Live BTC perpetual liquidation heatmaps · Hyperliquid + three CEX venues · Audited prospective learning
 
 [Download the Docker release](https://github.com/adlererik/LiquidHeat/releases/latest) · [Beginner installation](docs/INSTALL.md) · [Chart guide](docs/USER_GUIDE.md) · [Learning explained](docs/LEARNING.md)
 
@@ -14,29 +14,31 @@ Live BTC perpetual liquidation heatmaps · Three exchanges · Audited prospectiv
 
 ![LiquidHeat dashboard showing real BTC market observations, modeled concentration bands, candlesticks and the side profile](docs/images/dashboard.jpg)
 
-*Actual application capture using public exchange data. The bright bands are modeled exposure, not known private positions. A new installation builds its own history; no database or demo market data is bundled.*
+*CEX view, captured from the actual application using public exchange data. The bright bands are modeled exposure, not known private positions. A new installation builds its own history; no database or demo market data is bundled.*
 
 ## Your own Bitcoin market observatory
 
-LiquidHeat turns public Binance, Bybit and OKX perpetual futures observations into a continuously updated map of **estimated liquidation vulnerability**. Explore price levels, follow the candles through time, compare leverage scenarios, and inspect how much evidence supports an experimental liquidation-flow forecast.
+LiquidHeat offers two separate heatmap methods: **Hyperliquid positions** groups public account-reported liquidation thresholds; **CEX estimates** infers vulnerability from Binance, Bybit and OKX observations. The methods never blend their amounts. The Hyperliquid sample is incomplete and is not a verified global top 1,000. Explore price levels, follow the candles through time, compare leverage scenarios, and inspect how much evidence supports an experimental liquidation-flow forecast.
 
 It runs as four isolated Docker containers on hardware you already own. The browser is just a viewer: collection, calculation, historical storage and learning continue when you close it.
 
 | Explore | What you get |
 |---|---|
+| Two methodologies | Switch between sampled Hyperliquid positions and independent CEX estimates |
+| Live whale discovery | Large-account leaderboard seed plus both counterparties of public BTC fills ≥$50,000; paced account queries |
 | Historical heatmap | Horizontal concentration bands across 24 hours, 3, 7, 14 or 30 days |
 | Aligned candles and mark price | Trade-price candles and an optional mark overlay on shared time/price coordinates |
 | Price profile | Long/short exposure by price, with a cumulative view |
 | Flexible resolution | $25, $50, $100 or $200 price buckets |
-| Exchange and leverage filters | Binance / Bybit / OKX; 10×, 25×, 50×, 100× and 125× scenarios |
-| Easy navigation | Drag to pan, independent price/time zoom, and **Fit price** to find the candles |
+| CEX exchange and leverage filters | Binance / Bybit / OKX; 10×, 25×, 50×, 100× and 125× scenarios |
+| Easy navigation | Drag to pan, independent price/time zoom, **Fit price** for candles and **Fit liquidity** for all bands |
 | Concentration zones | Top estimated clusters, relative intensity, distance and descriptive Z-score |
 | CLLD oscillator | Estimated long-versus-short liquidation overhang, in USD and normalized form |
 | Learning panel | Audited outcomes, candidate progress, future-test requirements and promotion status |
 | Inspectable data | JSON export, REST API, WebSocket updates, feed coverage and model diagnostics |
 | Own your deployment | Persistent database, bounded resource settings, rotating backups and reboot recovery |
 
-**Read the colors as a map of a model's assumptions, not a promise about price.** LiquidHeat cannot see centralized exchanges' private accounts, collateral or exact leverage. Its heatmap remains uncalibrated. It cannot place trades.
+**Read the colors as sampled or inferred exposure, not a promise about price.** Hyperliquid prices are reported, mutable thresholds from an incomplete, staggered public-account sample. LiquidHeat cannot see centralized exchanges' private accounts, collateral or exact leverage; the CEX heatmap remains uncalibrated. It cannot place trades.
 
 ## Install without building an image
 
@@ -50,11 +52,11 @@ Run these commands **on the server that will host LiquidHeat**, not on a separat
 
 ```bash
 mkdir -p ~/liquidheat-download && cd ~/liquidheat-download
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.0.0/LiquidHeat-v1.0.0-linux-amd64.tar.gz
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.0.0/SHA256SUMS
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.1.0/LiquidHeat-v1.1.0-linux-amd64.tar.gz
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.1.0/SHA256SUMS
 sha256sum --check SHA256SUMS
 # Continue only if the check prints OK.
-tar -xzf LiquidHeat-v1.0.0-linux-amd64.tar.gz
+tar -xzf LiquidHeat-v1.1.0-linux-amd64.tar.gz
 cd LiquidHeat
 ./install.sh
 ```
@@ -69,7 +71,7 @@ Replace `YOUR_SERVER_LAN_IP` with the actual address; do not type it literally. 
 
 The installer checks Docker access, resource headroom, port availability and project-name collisions; verifies and loads the image archive; generates a mode-0600 database password; and starts only this Compose project. On a regular user's working systemd session it configures project startup and a daily backup timer. **Rootless Docker is recommended.** Its daemon and user services need boot persistence; the [beginner guide](docs/INSTALL.md) covers this, including Docker prerequisites and SSH access.
 
-A new installation can show **Building the observed market history** while real data arrives. There is no seeded synthetic chart. Historical candles can backfill up to 30 days where exchanges provide them; open interest and trade profiles have different limits. Older estimated matrices and learning outcomes cannot be conjured from missing observations.
+A new installation starts with **Hyperliquid positions** and records account history from collection onward. Large-account and large-fill discovery build the sample over time. **Fit liquidity** shows all reported price bands; **Fit price** finds the candles. The separate CEX view can show **Building the observed market history** while real data arrives. There is no seeded synthetic chart. Historical candles can backfill up to 30 days where exchanges provide them; open interest and trade profiles have different limits. Older estimated matrices and learning outcomes cannot be conjured from missing observations.
 
 Already have Docker and want a local-only unattended install?
 
@@ -82,9 +84,9 @@ For a server hosting other services, read the [shared-server precautions](docs/I
 
 ## Read the chart in one minute
 
-1. **Find the candles.** Click **Fit price**. Green/red candles describe actual exchange trades; the optional mark line is the venue's liquidation reference price.
+1. **Choose the method.** Hyperliquid uses reported account thresholds; CEX uses inferred leverage scenarios. **Fit liquidity** shows all bands. **Find the candles:** Click **Fit price**. Green/red candles describe actual exchange trades; the optional mark line is the venue's liquidation reference price.
 2. **Look across price.** Brighter horizontal bands mean more modeled exposure in that price range. Yellow is relatively intense; purple is lower intensity.
-3. **Look through time.** Each column is a saved model state. A band fading can reflect estimated closures, survival after a sweep, decay or changed inputs. Blank coverage is not invented.
+3. **Look through time.** Each column records the selected method's observed/model state. Hyperliquid bands change when sampled account thresholds or positions change, or observations become stale. CEX bands also reflect assumed closures, sweeps and decay. Blank coverage is not invented.
 4. **Check the side profile.** It summarizes exposure by price for the current state. Cumulative mode adds amounts progressively across price.
 5. **Compare assumptions.** Change exchange, leverage and bucket filters. Filtering to 100× means the model's 100× scenario, not confirmed 100× accounts.
 6. **Check evidence.** Diagnostics describe coverage and uncertain inputs. The learning panel reports validated progress separately from the main heatmap.
@@ -200,7 +202,9 @@ The dashboard has no login and serves HTTP. Keep it on a trusted LAN or behind a
 | `GET /healthz` | API/database health |
 | `WS /ws/stream` | Marks, candles, profile/state notifications, reported liquidation events |
 
-Example: `/api/v1/heatmap?lookback=7d&bucket=100&exchanges=binance,bybit&leverage=25,50`.
+Hyperliquid: `/api/v1/heatmap?source=hyperliquid&lookback=24h&bucket=100`. CEX exchange/leverage assumptions are rejected for this source.
+
+CEX example: `/api/v1/heatmap?lookback=7d&bucket=100&exchanges=binance,bybit&leverage=25,50`.
 
 Python 3.12, FastAPI, aiohttp, asyncpg, uvloop, NumPy/SciPy; PostgreSQL 16 plus **Apache-only** TimescaleDB 2.19.3; Nginx; locally vendored Apache ECharts 5. Runtime dependencies are pinned, base image digests are pinned, and Timescale source is checksum-verified. No proprietary Timescale `tsl` module is built or shipped. [License inventory →](docs/LICENSES.md)
 
@@ -210,7 +214,7 @@ Build from source on your Linux build/deployment server with `./scripts/build.sh
 
 ## Scope and honesty
 
-LiquidHeat is independent research software by **Erik Adler**, released under **Apache-2.0**. No affiliation with Glassnode, CoinGlass or the exchanges is implied. Its visual reference includes public Glassnode heatmap research; Glassnode's Hyperliquid visibility and this project's centralized-exchange estimates are materially different. It uses none of those vendors' paid data or APIs. [References →](docs/REFERENCES.md)
+LiquidHeat is independent research software by **Erik Adler**, released under **Apache-2.0**. No affiliation with Glassnode, CoinGlass or the exchanges is implied. Its visual reference includes public Glassnode heatmap research; Glassnode publishes two separate heatmap metrics; our earlier description of it as exclusively Hyperliquid was incomplete. Our Hyperliquid account discovery is incomplete, and our CEX inference is an independent model. Neither is claimed to reproduce Glassnode's private algorithm or exact account universe. [Method comparison →](docs/HYPERLIQUID.md) It uses none of those vendors' paid data or APIs. [References →](docs/REFERENCES.md)
 
 Reported liquidation streams can be incomplete; exchange access and historical retention vary by region and venue. USDT is treated approximately as USD. There is no guaranteed forecast improvement, confidence-calibrated private exposure estimate, profit claim, or claim of pixel-perfect equivalence.
 

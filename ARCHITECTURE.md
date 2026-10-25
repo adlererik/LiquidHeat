@@ -4,7 +4,7 @@ LiquidHeat runs four containers in a project-specific Docker Compose network. On
 
 ```mermaid
 flowchart TB
-    EX[Free public Binance / Bybit / OKX REST and WebSocket feeds] --> EN[Python async ingestion + model + learning worker]
+    EX[Free public Binance / Bybit / OKX feeds + Hyperliquid public positions] --> EN[Python async ingestion + model + learning worker]
     EN <--> DB[(PostgreSQL 16 + Apache-only TimescaleDB)]
     DB <--> API[FastAPI REST + WebSocket]
     API <--> NG[Nginx]
@@ -30,3 +30,9 @@ The same engine schedules prospective reported-Bybit-flow forecasts, receipt aud
 FastAPI exposes filtered snapshots, candles, profiles, CLLD, concentration zones and diagnostics. Historical responses use about 288 display columns, compressed matrices are stored as zlib payloads, and optional `since` requests limit refresh scope. WebSockets carry compact observations/state notifications; clients do not receive an entire full-history matrix for each tick. Nginx limits requests/connections. ECharts uses Canvas plus a rasterized heatmap layer and synchronized numeric axes.
 
 TimescaleDB is compiled `APACHE_ONLY=1`; no TSL module, licensed compression or proprietary scheduling is used. Application maintenance drops expired chunks and bounds ordinary-table learning retention. Restart policies, generated project startup units and persistent volume state support unattended operation. Container resource ceilings, one BLAS thread, small DB pools, bounded logs and a soft storage pause reduce shared-server pressure. These are not host-wide quotas.
+
+## Independent Hyperliquid source
+
+The same engine runs a bounded public-account collector with its own two-connection HTTP/WebSocket connector. A large-account-value leaderboard seeds up to 2,000 candidates; both counterparties of public BTC fills ≥$50,000 add query candidates. Public fills only discover accounts: reported position states determine exposure. The registry caps at 10,000 accounts, and the current sample ranks at most 1,000 fresh BTC positions. It is not a global top-1,000 census.
+
+`hl_accounts` persists latest successful observations and discovery signals. `hl_snapshots` records compressed direct-bin matrices and normalized constituents every five minutes. No CEX smoothing, leverage prior, decay, or inferred sweep is applied. A repeatable-read response uses one account selection for profile and CLLD consistency. `source=hyperliquid` selects the separate REST path; default API `source=cex` preserves compatibility. The UI defaults to Hyperliquid and keeps the two methods separate. See [method and sampling limits](docs/HYPERLIQUID.md).

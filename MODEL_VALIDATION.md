@@ -4,7 +4,7 @@
 
 Software tests establish numerical invariants and functioning data/serving/recovery paths. They do **not** establish that the main map reconstructs hidden positions, predicts price, forecasts complete venue-wide liquidations, or improves trading results. No published long-duration out-of-sample performance result exists at this initial release.
 
-The main exposure model uses unvalidated structural priors. Alpha remains `0.04`; leverage mixtures, unknown collateral and survival assumptions are uncertainty sources. Exchange maintenance information is used where accessible, but account size, hedges, cross-margin balances and margin additions are private. A range over assumptions is not a calibrated confidence interval.
+The CEX exposure model uses unvalidated structural priors. Alpha remains `0.04`; leverage mixtures, unknown collateral and survival assumptions are uncertainty sources. Exchange maintenance information is used where accessible, but account size, hedges, cross-margin balances and margin additions are private. A range over assumptions is not a calibrated confidence interval.
 
 ## Numerical and data invariants
 
@@ -32,3 +32,9 @@ A passed reported-Bybit-flow holdout would apply to that narrow target/period. I
 See [release verification](docs/RELEASE_VALIDATION.md) for the checks actually run on this package. Existing development checks included 36 model/learning unit tests, six ingestion/database/API/WS/replay groups, six learning integration groups, restart persistence, targeted learning restore, browser navigation/responsiveness and resource sampling. Synthetic numerical fixtures were restricted to disposable test databases; released charts use real observations only. A broad full-database restore attempt was interrupted and is not claimed to have passed.
 
 Reference-image comparison was qualitative against lawfully public Glassnode research figures. The underlying venues/date ranges differ, so no pixel-perfect or statistical-equivalence claim is justified. Screenshots document actual LiquidHeat output, not a fabricated marketing chart.
+
+## Separate Hyperliquid reported positions
+
+Reported account liquidation prices are distinct from our uncalibrated CEX model. The free leaderboard and large-fill trade stream discover candidate accounts; neither guarantees a complete universe. We select up to 1,000 BTC positions among those checked within 15 minutes, keeping null and out-of-grid thresholds in coverage counts without inventing prices. Each eligible position goes directly into one $25 bin; wider buckets sum these values. Sampled longs/shorts need not match, and sampled gross OI divides by twice one-sided exchange OI.
+
+Tests verify direct-bin conservation, null handling, native signs, ranked selection before exclusions, bounded streaming JSON decoding, qualifying public-fill discovery, fresh-state selection, closure handling, migration idempotence, source isolation, API privacy and deterministic replay of archived constituents. No observations are extrapolated to unknown accounts or CEX venues. Immutable history begins at collection time and does not arise from historic price candles. Read [the methodology and Glassnode comparison](docs/HYPERLIQUID.md).

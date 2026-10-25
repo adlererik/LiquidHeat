@@ -42,7 +42,8 @@ def main():
             SELECT NOT EXISTS(SELECT 1 FROM learning_forecasts WHERE issued_at>=target_start OR source_ts>issued_at);
             SELECT count(*)=1 FROM learning_control;
             SHOW timescaledb.license;""")
-        if checks != '3\nt\nt\nt\nt\nt\napache':
+        lines=checks.splitlines()
+        if len(lines)!=7 or lines[0] not in ('3','4','5') or lines[1:]!=['t']*5+['apache']:
             raise RuntimeError('Restored integrity checks failed: '+repr(checks))
         print('PASS: complete backup restored into a disposable DB; migrations, snapshots/checkpoints, CLLD, forecast timing and Apache-only extension verified.')
     finally:

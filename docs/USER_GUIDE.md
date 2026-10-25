@@ -2,13 +2,13 @@
 
 ## What is a liquidation heatmap?
 
-Imagine stacking estimated vulnerable futures positions into price shelves. The horizontal axis is time; the vertical axis is BTC price. Each cell represents modeled USD notional in a price range at that historical moment. Bright shelves indicate relatively concentrated vulnerability under the model's assumptions.
+Imagine stacking vulnerable futures positions into price shelves. Choose **Hyperliquid positions** for sampled public account-reported thresholds, or **CEX estimates** for inferred private leverage. The horizontal axis is time; the vertical axis is BTC price. Each cell represents modeled USD notional in a price range at that historical moment. Bright shelves indicate relatively concentrated vulnerability under the model's assumptions.
 
 Centralized exchanges do not publish everyone's collateral and leverage. LiquidHeat estimates these shelves from public observations. It is **not an order book**, a collection of known stop orders, or a promise that the market must visit a bright level.
 
 ## A practical first look
 
-Start with 24H, all exchanges and $100 buckets. Click **Fit price** so candles are visible. Pan around current price and inspect the side profile. Use $25 for finer detail and $200 for a broader view. Compare the underlying USD amounts: color normalization changes with the selected data.
+Start with 24H and $100 buckets. In Hyperliquid mode, **Fit liquidity** shows all bands. Account observations begin at collection time; older price candles do not provide historical position states. In CEX mode you can compare all three venues. Click **Fit price** so candles are visible. Pan around current price and inspect the side profile. Use $25 for finer detail and $200 for a broader view. Compare the underlying USD amounts: color normalization changes with the selected data.
 
 A smaller bucket does not improve the quality of unavailable information. It changes display resolution. Summing four $25 buckets approximately produces one $100 bucket; aggregation is not four new observations.
 
@@ -16,6 +16,8 @@ A smaller bucket does not improve the quality of unavailable information. It cha
 
 | Control | Behavior |
 |---|---|
+| Method | Separate reported Hyperliquid sample or inferred CEX exposure; never combined |
+| Fit liquidity | Show the full liquidation price range |
 | Lookback | Requested historical view; empty/gapped coverage remains honest |
 | Bucket | Width of each price interval in USD |
 | Exchange | Which venue exposure estimates contribute to the displayed matrix |
@@ -30,7 +32,7 @@ A smaller bucket does not improve the quality of unavailable information. It cha
 
 Drag the chart up/down to pan price and left/right to pan time. Wheel over the heatmap zooms time; Shift + wheel zooms price. Wheel over the right profile zooms price. Vertical and bottom sliders provide another way to pan/resize ranges. Incoming live updates preserve your chosen view.
 
-The candle venue is labeled in the footer. It is a selected exchange's trade series, not a synthetic blended candle. The dashboard headline mark is a venue mean; do not assume it is identical to one venue's mark. UTC timestamps avoid ambiguity across viewers.
+The candle venue is labeled in the footer. It is a selected exchange's trade series, not a synthetic blended candle. In Hyperliquid mode, the headline is its BTC/USDC mark. In CEX mode, the headline mark is a selected-venue mean; do not assume it is identical to one venue's mark. UTC timestamps avoid ambiguity across viewers.
 
 ## Glossary with examples
 
@@ -86,3 +88,7 @@ The candle venue is labeled in the footer. It is a selected exchange's trade ser
 Displayed history is compressed to about 288 time columns for efficient rendering. Longer views select the last saved state in each display interval; candles share the interval-end grid. Underlying five-minute states remain in the database during retention. Live mark/profile updates can arrive between finalized states.
 
 Exchange APIs differ: candles can reach 30 days where available; OKX open-interest history is more restricted. Live aggregate trades build real entry profiles after collection starts. The chart never fills missing historical positions with invented data. Diagnostics carry the provenance and limitations.
+
+## Public-account discovery is a sample
+
+The free leaderboard provides large-account candidates. A public BTC trade stream adds both counterparties of fills ≥$50,000. A fill can close exposure, so only an actual subsequent position query adds a liquidation threshold. We rank at most 1,000 BTC positions among discovered accounts checked within 15 minutes. This does not establish the largest 1,000 positions in the whole market. Diagnostics expose current sample size, checked/discovered counts, sampled gross OI fraction, null/out-of-grid prices and discovery health. See [methodology](HYPERLIQUID.md).

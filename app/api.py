@@ -5,8 +5,10 @@ import time
 import numpy as np
 from fastapi import FastAPI,Query,WebSocket,WebSocketDisconnect,HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from app import db
 from app import learning
+from app import hyperliquid, hl_api
 from app.config import EXCHANGES,LEVERAGES,VERSION
 from app.model import decode_array,WEIGHTS
 
@@ -22,7 +24,7 @@ async def lifespan(app):
     await p.close()
 
 
-app=FastAPI(title='BTC Liquidation Observatory',version='1.0.0',lifespan=lifespan)
+app=FastAPI(title='BTC Liquidation Observatory',version='1.1.0',lifespan=lifespan)
 
 
 def filters(exchanges,leverage):
@@ -37,7 +39,7 @@ def filters(exchanges,leverage):
 async def health():
     try:
         await p.fetchval('SELECT 1')
-        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='003')")
+        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='005')")
         return JSONResponse({'status':'ok' if migrated else 'starting'},status_code=200 if migrated else 503)
     except Exception:
         return JSONResponse({'status':'database_unavailable'},status_code=503)
@@ -128,7 +130,7 @@ async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',levera
     profiles=[{'price':x,'long_usd':round(profile[x][0],2),'short_usd':round(profile[x][1],2),'cumulative_long_usd':round(float(cumlong[i]),2),'cumulative_short_usd':round(float(cumshort[i]),2)} for i,x in enumerate(ps)]
     clld=[{'ts':(t+step)*1000,'long_usd':float(v[0]),'short_usd':float(v[1]),'usd':float(v[0]-v[1]),'normalized':float((v[0]-v[1])/max(1,v.sum()))} for t,v in zip(times,side_totals)]
     mark=float(np.mean([v['mark'] for v in provenance])) if provenance else await p.fetchval('SELECT avg(price) FROM live_marks WHERE exchange=ANY($1::text[])',ex)
-    return {'model_version':VERSION,'estimated':True,'incremental':since is not None,'times':display_times,'prices':prices,'matrix':matrix,
+    return {'source':'cex','model_version':VERSION,'estimated':True,'incremental':since is not None,'times':display_times,'prices':prices,'matrix':matrix,
             'candles':cs,'candle_exchange':candle_exchange,'profile':profiles,'clld':clld,'mark':mark,
             'normalization_p98':norm,'time_resolution_s':step,'bucket':bucket,'provenance':provenance,
             'uncertainty':{'status':'uncalibrated','alpha_prior_range':[.01,.15],'interval_type':'unidentified private positions; no calibrated confidence interval'},
@@ -139,29 +141,36 @@ _heatmap_lock=asyncio.Lock()
 _heatmap_cache={}
 
 @app.get('/api/v1/heatmap')
-async def heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str='',since:int|None=None):
-    key=(lookback,bucket,exchanges,leverage,since,int(time.monotonic()//15))
+async def heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str='',since:int|None=None,source:str='cex'):
+    if source not in ('cex','hyperliquid'): raise HTTPException(422,'Unknown source')
+    if source=='hyperliquid' and (exchanges or leverage): raise HTTPException(422,'CEX exchange/leverage assumptions do not apply to reported Hyperliquid positions')
+    key=(source,lookback,bucket,exchanges,leverage,since,int(time.monotonic()//15))
     async with _heatmap_lock:
         if _heatmap_cache.get('key')==key:
             return _heatmap_cache['response']
-        result=await build_heatmap(lookback,bucket,exchanges,leverage,since)
+        result=await hl_api.build(p,lookback,bucket,since) if source=='hyperliquid' else await build_heatmap(lookback,bucket,exchanges,leverage,since)
         _heatmap_cache.clear()
-        response=JSONResponse(result)
+        response=JSONResponse(jsonable_encoder(result))
         _heatmap_cache.update(key=key,response=response)
         return response
 
 
 @app.get('/api/v1/magnets')
-async def magnets(limit:int=Query(5,ge=1,le=20),bucket:int=100,exchanges:str='',leverage:str=''):
+async def magnets(limit:int=Query(5,ge=1,le=20),bucket:int=100,exchanges:str='',leverage:str='',source:str='cex'):
     if bucket not in (25,50,100,200):
         raise HTTPException(422,'Unsupported bucket')
-    try:
-        ex,ks=filters(exchanges,leverage)
-    except ValueError:
-        raise HTTPException(422,'Invalid leverage')
-    profile,prov=await latest_profiles(ex,ks,bucket)
+    if source not in ('cex','hyperliquid'): raise HTTPException(422,'Unknown source')
+    if source=='hyperliquid':
+        if exchanges or leverage: raise HTTPException(422,'CEX filters do not apply to Hyperliquid')
+        profile,prov,_,_=await hl_api.latest(p,bucket)
+    else:
+        try:
+            ex,ks=filters(exchanges,leverage)
+        except ValueError:
+            raise HTTPException(422,'Invalid leverage')
+        profile,prov=await latest_profiles(ex,ks,bucket)
     if not profile:
-        return {'estimated':True,'zones':[]}
+        return {'source':source,'estimated':source=='cex','sampled':source=='hyperliquid','zones':[]}
     prices=sorted(profile)
     values=np.array([sum(profile[x]) for x in prices])
     # Z score across all buckets in the modeled span, including zeros.
@@ -177,7 +186,7 @@ async def magnets(limit:int=Query(5,ge=1,le=20),bucket:int=100,exchanges:str='',
         zones.append({'price':price,'usd':round(float(value),2),'side':'long' if profile[price][0]>=profile[price][1] else 'short','intensity':float(value/max(1,values.max())),'z_score':float((value-mean)/sd),'distance_pct':(price/mark-1)*100})
         if len(zones)==limit:
             break
-    return {'estimated':True,'mark':mark,'zones':zones,'interpretation':'Concentration descriptors; no validated predictive attraction to price.'}
+    return {'source':source,'estimated':source=='cex','sampled':source=='hyperliquid','mark':mark,'zones':zones,'interpretation':'Concentration descriptors; no validated predictive attraction to price.'}
 
 
 @app.get('/api/v1/diagnostics')
@@ -193,7 +202,7 @@ async def diagnostics():
     recent=await p.fetch('SELECT ts,exchange,side,usd,price_semantics FROM observed_liquidations ORDER BY ts DESC LIMIT 10')
     health={r['exchange']:{'last_ts':r['ts'],'lag_s':max(0,time.time()-r['ts'].timestamp()),'steps':r['meta'].get('steps',0)} for r in cps}
     return {'model_version':VERSION,'estimated':True,'model_health':health,'calibration':{'alpha':.04,'bounds':[.01,.15],'status':'frozen pending independent out-of-sample validation','history_latest':[dict(x) for x in calibrations]},
-            'learning':await learning_status(),
+            'learning':await learning_status(),'hyperliquid':await hyperliquid.status(p),
             'leverage_weights':{'prior':dict(zip(LEVERAGES,WEIGHTS.tolist())),'okx_125x':'unsupported: weight zero, others renormalized','effective_parameters_table':'leverage_parameters'},
             'coverage':[dict(x) for x in feeds],'candle_gaps':[dict(x) for x in gaps],'open_interest':[dict(x) for x in oi],
             'observed_liquidations':[dict(x) for x in counts],'recent_liquidations':[dict(x) for x in recent],

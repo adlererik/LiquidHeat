@@ -54,7 +54,7 @@ async def main():
             assert -1<=r['oscillator']<=1
             assert abs(r['oscillator']-(r['long_usd']-r['short_usd'])/max(1.,r['long_usd']+r['short_usd']))<1e-10
         assert not await p.fetchval('SELECT EXISTS(SELECT 1 FROM calibration_history WHERE alpha_after<.01 OR alpha_after>.15)')
-        assert await p.fetchval('SELECT count(distinct exchange) FROM candles')==3
+        assert await p.fetchval("SELECT count(distinct exchange) FROM candles WHERE exchange IN ('binance','bybit','okx')")==3
         assert await p.fetchval('SELECT count(distinct exchange) FROM open_interest')==3
         assert await p.fetchval('SELECT count(*) FROM observed_liquidations')>0
         for r in await p.fetch('SELECT * FROM model_checkpoints'):
