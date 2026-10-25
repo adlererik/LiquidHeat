@@ -78,7 +78,7 @@ Already have Docker and want a local-only unattended install?
 ./liquidheat.sh doctor
 ```
 
-For a server hosting other services, read the [shared-server precautions](docs/INSTALL.md#shared-server-checks) first. The installer does not install a daemon, modify a firewall, restart unrelated services or reuse an unknown project's volume.
+For a server hosting other services, read the [shared-server precautions](docs/INSTALL.md#shared-server-checks) first. The installer does not install a daemon, run host firewall commands, restart unrelated services or reuse an unknown project's volume. An existing rootful Docker daemon can create its normal network/firewall rules when adding a bridge network; rootless Docker avoids host-level bridge rules.
 
 ## Read the chart in one minute
 

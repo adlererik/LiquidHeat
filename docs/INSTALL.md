@@ -26,7 +26,7 @@ ip -brief address
 
 An administrator can also inspect existing firewall rules read-only with `sudo nft list ruleset` or the firewall's status command. Do not change them simply to install LiquidHeat. Inventory existing Docker contexts/projects with `docker context ls` and `docker compose ls` if available. An inaccessible daemon is not proof that Docker is absent.
 
-The application uses an unused high port and its own Compose project, network and volume. Its installer never installs or restarts Docker, changes firewall rules, prunes volumes, alters a proxy or stops unrelated containers. **Do not replace an existing runtime on a shared server.** First understand it and use its existing supported access, or set up a separately isolated rootless daemon with the administrator.
+The application uses an unused high port and its own Compose project, network and volume. Its installer never installs or restarts Docker, invokes host firewall commands, prunes volumes, alters a proxy or stops unrelated containers. An existing rootful Docker daemon can add its own managed network/firewall rules when creating a bridge network; review that policy on a shared host. Rootless Docker confines this networking to its namespace. **Do not replace an existing runtime on a shared server.** First understand it and use its existing supported access, or set up a separately isolated rootless daemon with the administrator.
 
 ## 2. Prepare Docker once
 
