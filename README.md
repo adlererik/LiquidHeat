@@ -12,9 +12,17 @@ Live BTC perpetual liquidation heatmaps · Hyperliquid + three CEX venues · Aud
 
 </div>
 
+![LiquidHeat Hyperliquid view showing reported position bands and measured account coverage](docs/images/hyperliquid.jpg)
+
+*Actual Hyperliquid view after about 20 minutes of collection. Earlier account history is blank. Reported thresholds come from an incomplete public-account sample; no positions are fabricated or extrapolated.*
+
+<details><summary>See the separate CEX estimate dashboard</summary>
+
 ![LiquidHeat dashboard showing real BTC market observations, modeled concentration bands, candlesticks and the side profile](docs/images/dashboard.jpg)
 
 *CEX view, captured from the actual application using public exchange data. The bright bands are modeled exposure, not known private positions. A new installation builds its own history; no database or demo market data is bundled.*
+
+</details>
 
 ## Your own Bitcoin market observatory
 
@@ -105,7 +113,7 @@ LiquidHeat includes an **automatic, auditable learning pipeline** for a narrow q
 
 > How much *reported Bybit BTCUSDT liquidation notional* will be recorded in the next 15 minutes, separately for longs and shorts?
 
-This is separate from the main heatmap's estimated hidden exposure. It does not learn private account positions, predict Bitcoin's direction, or automatically make the heatmap's dollar totals accurate.
+This experiment is separate from both heatmap methods. It does not train or change reported Hyperliquid thresholds, and it does not calibrate the CEX model's hidden exposure. It does not learn private account positions, predict Bitcoin's direction, or automatically make the heatmap's dollar totals accurate.
 
 ```mermaid
 flowchart LR
@@ -135,7 +143,13 @@ Earliest promotion is roughly **three weeks of sufficient observations**, often 
 
 [Detailed learning protocol, audit rules, baselines and rollback →](docs/LEARNING.md)
 
-## How the heatmap is calculated
+## How the Hyperliquid view works
+
+The leaderboard seeds large-account candidates; a public BTC trade stream discovers both counterparties of fills ≥$50,000. The collector then queries actual account positions, ranks up to 1,000 fresh BTC positions from its discovered sample, and groups non-null reported liquidation prices into $25 bins. Larger buckets sum those values. It does not guess leverage, spread a whale across hypothetical prices, or treat a trade as proof of a new position.
+
+Saved observations build historical streaks from collection onward. Current profiles and CLLD use the same consistent account selection. The sample can miss accounts, and reported prices can change with collateral and other positions. [Full methodology and the two Glassnode metrics →](docs/HYPERLIQUID.md)
+
+## How the CEX estimate is calculated
 
 LiquidHeat keeps **public observations**, **modeled exposure** and **observed liquidation reports** separate.
 

@@ -1,3 +1,23 @@
+# Release validation — v1.1.0
+
+Verified on 2026-10-26 using Linux amd64 containers on a Debian deployment/build server. The control workstation ran no application containers. The following checks were actually run:
+
+- 62 unit, numerical, learning and installer tests passed in the public application image (52 core tests plus 10 installer checks).
+- Six Hyperliquid integration groups passed: additive/idempotent migrations, discrete bucket conservation and CLLD, stale-data handling, immutable constituent replay, durable large-fill discovery/deduplication, and source/filter isolation with cached JSON serialization.
+- All five supported lookbacks returned real reported-position matrices, candles and profiles. Current profile totals matched the latest CLLD. Invalid source/method-filter combinations returned 422.
+- Real public BTC trade WebSocket probe: 50 fills, four at least $50,000, with both counterparties present. Production discovery counters and normal account queries confirmed ongoing large-fill ingestion; no market positions were created from trade direction.
+- Actual Hyperliquid mark and snapshot messages arrived through the application's public WebSocket.
+- Existing CEX integration suite passed six groups, including real ingestion/deduplication, REST/filter checks, WebSocket events and deterministic replay of 150 real-input intervals. Twenty previously recorded CEX matrix digests were unchanged.
+- A project engine restart recovered live discovery in about 21 seconds, preserved the account registry and historical matrix/constituent digests, reused the leaderboard checkpoint and created no duplicate account identifiers.
+- A fresh isolated Compose installation using the public images started all four services successfully. Its full backup restored into a disposable database, including migration-ledger, checkpoint/snapshot, CLLD, forecast-time and Apache-only checks. All four test containers also restarted successfully.
+- Browser checks covered the separate methods, clear-on-switch behavior, native account versus hypothetical CEX filters, cumulative profiles, Fit price / Fit liquidity, shared axes and crisp overview rendering. Adaptive raster tests preserved genuine peaks across five resolutions using 195 Hyperliquid cells and 100,844 CEX cells without inventing or mutating exposure values.
+
+The screenshot records an early incomplete account sample, not a historical Glassnode dataset. Matching Glassnode's undisclosed account universe, aggregation and normalization has not been established. The CEX exposure priors remain uncalibrated and no predictive benefit is claimed for the newly collected Hyperliquid sample. Large fills are discovery signals, not evidence of newly opened positions or forced liquidation.
+
+Previous release verification is preserved below. v1.0.0 checks describe that earlier version, not additional v1.1.0 runs.
+
+---
+
 # Release validation — v1.0.0
 
 Verified on 2026-10-25, Linux amd64 / Debian, with a separate Compose project and fresh volume. The development/control workstation ran no application containers. Private host identifiers, raw operational records and populated databases are not included in this repository.

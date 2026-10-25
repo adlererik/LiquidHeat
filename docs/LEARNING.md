@@ -1,5 +1,7 @@
 # Prospective learning and validation
 
+This experiment targets recorded Bybit liquidation flow. It does not learn or modify reported Hyperliquid liquidation thresholds, and it does not calibrate the separate CEX exposure model.
+
 The application automatically collects auditable outcomes, trains small candidate models, records their future predictions, and promotes only candidates that pass a fixed future test. It can also roll back an underperforming promoted model. It runs in the existing Debian engine container under its existing CPU/RAM limits. No new dependencies, accounts, APIs, paid services or containers are required for normal operation.
 
 ## What can learn
