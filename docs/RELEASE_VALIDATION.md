@@ -6,7 +6,7 @@ Verified on 2026-10-25, Linux amd64 / Debian, with a separate Compose project an
 |---|---|
 | Three Docker images build serially under conservative limits | Passed |
 | Checksum-verified image loading and guided fresh install | Passed; all four services healthy |
-| Unit/numerical/learning/installer safeguards | 45 tests passed |
+| Unit/numerical/learning/installer safeguards | 46 tests passed |
 | Database migrations, invariants, real public ingestion/deduplication, REST lookbacks/filters, WebSocket events, actual-input replay | Six integration groups passed; 150 intervals replayed |
 | Learning migrations, future issuance, DB cutoff, receipt exclusion/immutable labels, guarded promotion/retirement/rollback, atomic training audit | Six integration groups passed |
 | Price navigation helper regressions | Six tests passed using real current market output |
@@ -21,6 +21,8 @@ Verified on 2026-10-25, Linux amd64 / Debian, with a separate Compose project an
 | Shared-host protection | Existing production container IDs and monitored unrelated service process/start records unchanged |
 
 A resource sample during verification observed approximately 120 MiB database, 57 MiB engine, 89 MiB API and 2.5 MiB web memory, below the configured ceilings. More than 2 GiB host memory remained available. This is a fresh-installation observation, not a sustained-load or month-old database benchmark. A full host reboot was deliberately not used on a shared server; boot configuration and container recovery were checked separately.
+
+A cold-bundle check caught and fixed a port preflight edge case: a closed connection in TIME_WAIT no longer blocks reuse, while active listeners remain protected. A regression test covers both conditions.
 
 Initial integration attempts correctly stopped when there was not yet a real Bybit liquidation report in a completed window. After genuinely collected evidence matured, the learning suite passed. Synthetic transition fixtures stayed inside its disposable test database. No such fixtures are shown as market data or used to fit live forecasts.
 

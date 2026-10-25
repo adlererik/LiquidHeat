@@ -30,6 +30,17 @@ class InstallerSafety(unittest.TestCase):
         for port in (0, 22, 65536):
             with self.assertRaises(ValueError): m.free_port('127.0.0.1', port)
 
+    def test_closed_connection_time_wait_does_not_block_safe_reuse(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+            listener.bind(('127.0.0.1',0));listener.listen()
+            port=listener.getsockname()[1]
+            with socket.create_connection(('127.0.0.1',port)) as client:
+                accepted,_=listener.accept()
+                accepted.close()  # The accepting side initiates close/TIME_WAIT.
+                self.assertEqual(client.recv(1),b'')
+        m.free_port('127.0.0.1',port)
+
     def test_unmanaged_env_is_never_overwritten(self):
         from argparse import Namespace
         with tempfile.TemporaryDirectory() as folder:

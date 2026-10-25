@@ -49,7 +49,11 @@ def free_port(bind, port):
     if not 1024 <= port <= 65535:
         raise ValueError('Choose a port between 1024 and 65535.')
     with socket.socket() as s:
-        s.bind((bind, port))  # No SO_REUSEADDR: occupied ports must fail.
+        # Permit closed connections in TIME_WAIT; an active listener still fails.
+        # Do not set SO_REUSEPORT, which could share an existing listener.
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((bind, port))
+        s.listen(1)
 
 
 def preflight():
