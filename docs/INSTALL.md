@@ -73,7 +73,7 @@ If you deliberately use an existing rootful Docker daemon, make sure its service
 
 ## 3. Download the full release
 
-Use the commands in the main README. Choose **LiquidHeat-v1.0.0-linux-amd64.tar.gz**, not GitHub's automatically generated source archive, if you want prebuilt images. Download `SHA256SUMS` into the same directory and run `sha256sum --check SHA256SUMS`. An `OK` result detects corruption against the published checksum; it is not an independent code-signing identity.
+The download commands need `curl`, `tar`, `sha256sum` and Python 3. On Debian, install missing prerequisites with `sudo apt-get install -y curl python3`. Alternatively, download the two release assets in your browser and copy them to your server. Use the commands in the main README. Choose **LiquidHeat-v1.0.0-linux-amd64.tar.gz**, not GitHub's automatically generated source archive, if you want prebuilt images. Download `SHA256SUMS` into the same directory and run `sha256sum --check SHA256SUMS`. An `OK` result detects corruption against the published checksum; it is not an independent code-signing identity.
 
 Extract it, change into `LiquidHeat`, and run `./install.sh`. No build or registry login is needed. Keep the installation folder: it contains Compose, your private generated settings, operation helpers and backups. Do not put it in a temporary directory.
 

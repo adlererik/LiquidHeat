@@ -42,7 +42,9 @@ It runs as four isolated Docker containers on hardware you already own. The brow
 
 The easiest option is the **Linux x86-64 / amd64 Docker bundle** on the [Releases page](https://github.com/adlererik/LiquidHeat/releases/latest). It contains all three prebuilt images: application, Nginx frontend and the Apache-only TimescaleDB database. Engine and API share the application image.
 
-You need a Linux server, Docker Engine with Compose, Python 3, an Internet connection to the public exchanges, and available capacity. Recommended starting point: **4 GB RAM, 2+ CPU cores and 10 GB free disk**; the installer requires at least 1,400 MiB *available* RAM and 6 GiB free storage. Budget extra space for databases and local backups. Current prebuilt release: **amd64 only**. Docker Desktop and a registry account are unnecessary.
+You need a Linux server, Docker Engine with Compose, Python 3, `curl`, `tar` and `sha256sum`, an Internet connection to the public exchanges, and available capacity. Recommended starting point: **4 GB RAM, 2+ CPU cores and 10 GB free disk**; the installer requires at least 1,400 MiB *available* RAM and 6 GiB free storage. Budget extra space for databases and local backups. Current prebuilt release: **amd64 only**. Docker Desktop and a registry account are unnecessary.
+
+If `curl` or Python is missing on Debian, install the prerequisites with `sudo apt-get install -y curl python3`. See the beginner guide if Docker is missing.
 
 Run these commands **on the server that will host LiquidHeat**, not on a separate laptop used to control it:
 
