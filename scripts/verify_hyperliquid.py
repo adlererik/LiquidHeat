@@ -51,12 +51,13 @@ async def main():
         print('PASS closures, immutable historical state and deterministic constituent replay',flush=True)
         from unittest.mock import AsyncMock
         collector=hyperliquid.Collector(p,None)
-        collector.pending={address:60000.,'0x'+'2'*40:70000.}
+        ms=int(__import__('time').time()*1000)
+        collector.trade_buffer.add([{'coin':'BTC','time':ms,'tid':1,'px':'60000','sz':'1','users':[address,'0x'+'2'*40]}])
         await collector.flush_signals()
         assert await p.fetchval('SELECT count(*) FROM hl_accounts')==2
         assert await p.fetchval('SELECT largest_trade_usd FROM hl_accounts WHERE address=$1',address)==60000
         assert await p.fetchval('SELECT signaled_at IS NOT NULL FROM hl_accounts WHERE address=$1',address)
-        collector.pending={address:50000.}
+        collector.trade_buffer.add([{'coin':'BTC','time':ms,'tid':2,'px':'50000','sz':'1','users':[address,'0x'+'2'*40]}])
         await collector.flush_signals()
         assert await p.fetchval('SELECT largest_trade_usd FROM hl_accounts WHERE address=$1',address)==60000
         collector.info=AsyncMock(return_value={'assetPositions':[]})

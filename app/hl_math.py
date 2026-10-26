@@ -98,20 +98,23 @@ def projection(positions, mark, oi_btc=None):
     start = math.floor(mark*.5/25)*25
     n = math.ceil((mark*1.5-start)/25)+1
     matrix = np.zeros((2,n),dtype=np.float64)
-    missing=outside=0; gross=eligible=0.
+    missing=outside=0; gross=eligible=missing_btc=outside_btc=0.
     for p in selected:
         qty=abs(p['size_btc']); gross+=qty
         liq=p['liquidation_price']
         if liq is None:
-            missing+=1; continue
+            missing+=1; missing_btc+=qty; continue
         i=math.floor((liq-start)/25)
         if not 0<=i<n:
-            outside+=1; continue
+            outside+=1; outside_btc+=qty; continue
         matrix[0 if p['size_btc']>0 else 1,i]+=qty; eligible+=qty
     audit={'selected_positions':len(selected),'selection_limit':TOP_N,'null_thresholds':missing,
            'outside_grid_positions':outside,'selected_gross_btc':gross,'included_gross_btc':eligible,
            'market_one_sided_oi_btc':oi_btc,
            'selected_share_of_market_gross':gross/(2*oi_btc) if oi_btc and oi_btc>0 else None,
+           'plotted_positions':len(selected)-missing-outside,'null_threshold_gross_btc':missing_btc,
+           'outside_grid_gross_btc':outside_btc,
+           'plotted_share_of_market_gross':eligible/(2*oi_btc) if oi_btc and oi_btc>0 else None,
            'universe':'largest BTC positions among discovered, fresh accounts; global rank unknown',
            'freshness_limit_s':FRESH_SECONDS,'thresholds':'reported at account query time; mutable, sometimes null',
            'smoothing':'none; direct $25 bins','history':'prospectively recorded observations only'}

@@ -74,3 +74,21 @@ Keep the server and exchange connections running. Daily review and forecast sche
 The web application is read-only and unauthenticated over HTTP. Bind to a private LAN or loopback; use an SSH tunnel if desired. Do not port-forward it publicly without your own access control/TLS. There are no exchange/account/order keys. Public market feeds and software downloads require outbound Internet access. No paid service, cloud infrastructure or runtime telemetry service is required.
 
 Screenshots in this repository contain the application and public market data only. Local addresses, usernames, host inventories, database contents, secrets and private Git history are not release assets. Report issues with redacted errors, not complete dumps or unfiltered operational logs.
+
+## Expanded Hyperliquid discovery
+
+Migration 006 adds a persistent account queue, bounded all-fill deduplication, relationship discovery, per-account retries and first-discovery attribution. The existing container resource limits are unchanged. See [DISCOVERY.md](docs/DISCOVERY.md) for scheduling, capacity, percentage denominators and limitations. Run `python -m scripts.verify_discovery` inside the engine image for disposable-database integration checks.
+
+### Updating from v1.1 to v1.2
+
+Back up from the existing installation first with `./liquidheat.sh backup`. Extract the checksum-verified new release into a separate temporary directory, then overlay its bundled source/assets into the existing LiquidHeat directory. Preserve `.env`, `.liquidheat-install.json`, `backups/` and the project database volume; none are included in the release archive. From the existing installation directory, verify and load the replacement images explicitly:
+
+```bash
+sha256sum --check IMAGE-SHA256SUMS
+docker load --input docker-images-linux-amd64.tar.gz
+./liquidheat.sh start
+./liquidheat.sh status
+./liquidheat.sh doctor
+```
+
+Repeating `install.sh` on an existing installation preserves its settings and skips image loading, so it is not a substitute for the explicit load step during an upgrade. The application applies additive migration 006; it does not reconstruct or rewrite past account states. The database image and volume remain the same. Refresh your browser to load the new account-discovery panel.

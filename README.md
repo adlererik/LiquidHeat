@@ -12,9 +12,9 @@ Live BTC perpetual liquidation heatmaps · Hyperliquid + three CEX venues · Aud
 
 </div>
 
-![LiquidHeat Hyperliquid view showing reported position bands and measured account coverage](docs/images/hyperliquid.jpg)
+![LiquidHeat v1.2 showing real reported bands, sampled versus plotted coverage, and the persistent account discovery queue](docs/images/discovery.png)
 
-*Actual Hyperliquid view after about 20 minutes of collection. Earlier account history is blank. Reported thresholds come from an incomplete public-account sample; no positions are fabricated or extrapolated.*
+*Actual v1.2 dashboard with real reported positions and discovery progress. Earlier account history is blank. The account sample is incomplete; no positions are fabricated or extrapolated.*
 
 <details><summary>See the separate CEX estimate dashboard</summary>
 
@@ -33,7 +33,7 @@ It runs as four isolated Docker containers on hardware you already own. The brow
 | Explore | What you get |
 |---|---|
 | Two methodologies | Switch between sampled Hyperliquid positions and independent CEX estimates |
-| Live whale discovery | Large-account leaderboard seed plus both counterparties of public BTC fills ≥$50,000; paced account queries |
+| Live whale discovery | Broader leaderboard queue, all received BTC fills, linked subaccounts/vaults, and paced account queries |
 | Historical heatmap | Horizontal concentration bands across 24 hours, 3, 7, 14 or 30 days |
 | Aligned candles and mark price | Trade-price candles and an optional mark overlay on shared time/price coordinates |
 | Price profile | Long/short exposure by price, with a cumulative view |
@@ -60,11 +60,11 @@ Run these commands **on the server that will host LiquidHeat**, not on a separat
 
 ```bash
 mkdir -p ~/liquidheat-download && cd ~/liquidheat-download
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.1.0/LiquidHeat-v1.1.0-linux-amd64.tar.gz
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.1.0/SHA256SUMS
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.0/LiquidHeat-v1.2.0-linux-amd64.tar.gz
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.0/SHA256SUMS
 sha256sum --check SHA256SUMS
 # Continue only if the check prints OK.
-tar -xzf LiquidHeat-v1.1.0-linux-amd64.tar.gz
+tar -xzf LiquidHeat-v1.2.0-linux-amd64.tar.gz
 cd LiquidHeat
 ./install.sh
 ```
@@ -79,7 +79,7 @@ Replace `YOUR_SERVER_LAN_IP` with the actual address; do not type it literally. 
 
 The installer checks Docker access, resource headroom, port availability and project-name collisions; verifies and loads the image archive; generates a mode-0600 database password; and starts only this Compose project. On a regular user's working systemd session it configures project startup and a daily backup timer. **Rootless Docker is recommended.** Its daemon and user services need boot persistence; the [beginner guide](docs/INSTALL.md) covers this, including Docker prerequisites and SSH access.
 
-A new installation starts with **Hyperliquid positions** and records account history from collection onward. Large-account and large-fill discovery build the sample over time. **Fit liquidity** shows all reported price bands; **Fit price** finds the candles. The separate CEX view can show **Building the observed market history** while real data arrives. There is no seeded synthetic chart. Historical candles can backfill up to 30 days where exchanges provide them; open interest and trade profiles have different limits. Older estimated matrices and learning outcomes cannot be conjured from missing observations.
+A new installation starts with **Hyperliquid positions** and records account history from collection onward. The broader account queue and public BTC fills build the sample over time. **Fit liquidity** shows all reported price bands; **Fit price** finds the candles. The separate CEX view can show **Building the observed market history** while real data arrives. There is no seeded synthetic chart. Historical candles can backfill up to 30 days where exchanges provide them; open interest and trade profiles have different limits. Older estimated matrices and learning outcomes cannot be conjured from missing observations.
 
 Already have Docker and want a local-only unattended install?
 
@@ -143,9 +143,13 @@ Earliest promotion is roughly **three weeks of sufficient observations**, often 
 
 [Detailed learning protocol, audit rules, baselines and rollback →](docs/LEARNING.md)
 
+## Account discovery and coverage
+
+The discovery panel distinguishes **sampled gross OI** from **plotted gross OI**, shows pending account checks and observation age, and attributes first BTC discoveries to their original discovery path. The durable queue reserves capacity for exploration while refreshing large positions. Successfully empty accounts normally wait 24 hours, with new trade activity able to advance a check. This improves observation coverage; it is not automatic predictive calibration. [Discovery mechanics, limits and measurements →](docs/DISCOVERY.md)
+
 ## How the Hyperliquid view works
 
-The leaderboard seeds large-account candidates; a public BTC trade stream discovers both counterparties of fills ≥$50,000. The collector then queries actual account positions, ranks up to 1,000 fresh BTC positions from its discovered sample, and groups non-null reported liquidation prices into $25 bins. Larger buckets sum those values. It does not guess leverage, spread a whale across hypothetical prices, or treat a trade as proof of a new position.
+The collector retains candidates from the full published leaderboard within its safety budget, follows public subaccount/vault links, and discovers both counterparties of received BTC fills including smaller fills. The collector then queries actual account positions, ranks up to 1,000 fresh BTC positions from its discovered sample, and groups non-null reported liquidation prices into $25 bins. Larger buckets sum those values. It does not guess leverage, spread a whale across hypothetical prices, or treat a trade as proof of a new position.
 
 Saved observations build historical streaks from collection onward. Current profiles and CLLD use the same consistent account selection. The sample can miss accounts, and reported prices can change with collateral and other positions. [Full methodology and the two Glassnode metrics →](docs/HYPERLIQUID.md)
 

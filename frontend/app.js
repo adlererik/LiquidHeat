@@ -215,11 +215,24 @@ function sampleSummary(s){
  if(!s)return;const a=s.current_sample||s.sample;const stale=s.snapshot_age_s==null||s.snapshot_age_s>600;
  $('coverage').textContent=(a?.selected_positions||0)+' sampled BTC positions'+(stale?' · stale':'');
  const share=a?.selected_share_of_market_gross;
- $('coverage-sub').textContent=`${s.checked||0} / ${s.discovered||0} accounts checked`+(share==null?'':` · ${(share*100).toFixed(1)}% gross OI sampled`);
+ const plotted=a?.plotted_share_of_market_gross, pct=x=>x==null?'—':(x*100).toFixed(1)+'%';
+ $('coverage-sub').textContent=`${pct(share)} gross OI sampled · ${pct(plotted)} plotted`;
  $('source-description').textContent=`Reported prices · ${a?.null_thresholds||0} null / ${a?.outside_grid_positions||0} outside grid excluded · ≤15m account age · global rank unknown`;
+ $('discovery-coverage').textContent=`${pct(share)} sampled / ${pct(plotted)} plotted`;
+ $('discovery-excluded').textContent=`${a?.plotted_positions||0} plotted positions · ${a?.null_thresholds||0} null thresholds · ${a?.outside_grid_positions||0} outside grid`;
+ const q=s.discovery;
+ if(q){
+  $('discovery-queue').textContent=`${(s.checked||0).toLocaleString()} / ${(s.discovered||0).toLocaleString()} checked`;
+  $('discovery-freshness').textContent=`${(q.never_checked||0).toLocaleString()} never checked · median tracked age ${q.median_position_age_s==null?'—':Math.round(q.median_position_age_s/60)+'m'} · ${q.stale_positions||0} stale positions excluded`;
+  const additions=(q.first_btc_discoveries||[]).filter(r=>r.source!=='pre-expansion');
+  $('discovery-new').textContent=`${additions.reduce((n,r)=>n+r.accounts,0).toLocaleString()} accounts since queue upgrade`;
+  const labels={public_leaderboard_full:'full leaderboard',public_leaderboard:'initial leaderboard',public_btc_trade:'BTC fills',public_large_btc_trade:'large fills',public_subaccount:'subaccounts',public_vault:'vaults',public_vault_child:'vault children'};
+  $('discovery-sources').textContent=additions.map(r=>`${labels[r.source]||r.source}: ${r.accounts}`).join(' · ')||'New discoveries will appear as accounts are checked.';
+ }
 }
 function sourceView(){
  const hl=source==='hyperliquid';
+ $('discovery-panel').hidden=!hl;
  $('exchange-filters').hidden=hl;$('leverage-filters').hidden=hl;$('reported-filters').hidden=!hl;
  $('method-badge').textContent=hl?'REPORTED · SAMPLED':'ESTIMATED';$('instrument-name').textContent=hl?'BTC / USDC':'BTC / USDT';$('mark-venue').textContent=hl?'HYPERLIQUID':'VENUE MEAN';
  $('method-heading').textContent=hl?'Reported Hyperliquid liquidation thresholds, sampled from public accounts.':'Estimated exposure from public Binance, Bybit and OKX market data.';

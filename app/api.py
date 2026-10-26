@@ -24,7 +24,7 @@ async def lifespan(app):
     await p.close()
 
 
-app=FastAPI(title='BTC Liquidation Observatory',version='1.1.0',lifespan=lifespan)
+app=FastAPI(title='BTC Liquidation Observatory',version='1.2.0',lifespan=lifespan)
 
 
 def filters(exchanges,leverage):
@@ -39,7 +39,7 @@ def filters(exchanges,leverage):
 async def health():
     try:
         await p.fetchval('SELECT 1')
-        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='005')")
+        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='006')")
         return JSONResponse({'status':'ok' if migrated else 'starting'},status_code=200 if migrated else 503)
     except Exception:
         return JSONResponse({'status':'database_unavailable'},status_code=503)

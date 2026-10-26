@@ -36,3 +36,7 @@ TimescaleDB is compiled `APACHE_ONLY=1`; no TSL module, licensed compression or 
 The same engine runs a bounded public-account collector with its own two-connection HTTP/WebSocket connector. A large-account-value leaderboard seeds up to 2,000 candidates; both counterparties of public BTC fills ≥$50,000 add query candidates. Public fills only discover accounts: reported position states determine exposure. The registry caps at 10,000 accounts, and the current sample ranks at most 1,000 fresh BTC positions. It is not a global top-1,000 census.
 
 `hl_accounts` persists latest successful observations and discovery signals. `hl_snapshots` records compressed direct-bin matrices and normalized constituents every five minutes. No CEX smoothing, leverage prior, decay, or inferred sweep is applied. A repeatable-read response uses one account selection for profile and CLLD consistency. `source=hyperliquid` selects the separate REST path; default API `source=cex` preserves compatibility. The UI defaults to Hyperliquid and keeps the two methods separate. See [method and sampling limits](docs/HYPERLIQUID.md).
+
+## Expanded Hyperliquid discovery
+
+Migration 006 adds a persistent account queue, bounded all-fill deduplication, relationship discovery, per-account retries and first-discovery attribution. The existing container resource limits are unchanged. See [DISCOVERY.md](docs/DISCOVERY.md) for scheduling, capacity, percentage denominators and limitations. Run `python -m scripts.verify_discovery` inside the engine image for disposable-database integration checks.

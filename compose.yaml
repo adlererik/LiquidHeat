@@ -1,7 +1,7 @@
 name: liquidheat
 x-app: &app
   build: .
-  image: liquidheat-app:1.1.0
+  image: liquidheat-app:1.2.0
   restart: unless-stopped
   init: true
   read_only: true
@@ -69,7 +69,7 @@ services:
       retries: 10
   web:
     build: {context: ., dockerfile: frontend/Dockerfile}
-    image: liquidheat-web:1.1.0
+    image: liquidheat-web:1.2.0
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp:size=16m]
