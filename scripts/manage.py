@@ -208,6 +208,12 @@ def backup(c):
     print(f'Backup saved: {path.name} (three newest retained).')
 
 
+def valid_backup_checks(checks, max_migrations):
+    lines=checks.splitlines()
+    count=int(lines[0]) if lines and lines[0].isdigit() else 0
+    return len(lines)==7 and 3<=count<=max_migrations and lines[1:]==['t']*5+['apache']
+
+
 def doctor(c):
     compose(c, 'ps')
     base = f'http://{c["bind"]}:{c["port"]}'

@@ -39,7 +39,7 @@ def filters(exchanges,leverage):
 async def health():
     try:
         await p.fetchval('SELECT 1')
-        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='006')")
+        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='007')")
         return JSONResponse({'status':'ok' if migrated else 'starting'},status_code=200 if migrated else 503)
     except Exception:
         return JSONResponse({'status':'database_unavailable'},status_code=503)

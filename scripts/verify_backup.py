@@ -4,7 +4,7 @@ Never overwrites the running database or restores into an operator-supplied name
 """
 import hashlib
 import secrets
-from manage import ROOT, compose, configuration
+from manage import ROOT, compose, configuration, valid_backup_checks
 
 
 def main():
@@ -42,8 +42,8 @@ def main():
             SELECT NOT EXISTS(SELECT 1 FROM learning_forecasts WHERE issued_at>=target_start OR source_ts>issued_at);
             SELECT count(*)=1 FROM learning_control;
             SHOW timescaledb.license;""")
-        lines=checks.splitlines()
-        if len(lines)!=7 or lines[0] not in ('3','4','5') or lines[1:]!=['t']*5+['apache']:
+        expected_migrations=len(list((ROOT/'migrations').glob('*.sql')))
+        if not valid_backup_checks(checks,expected_migrations):
             raise RuntimeError('Restored integrity checks failed: '+repr(checks))
         print('PASS: complete backup restored into a disposable DB; migrations, snapshots/checkpoints, CLLD, forecast timing and Apache-only extension verified.')
     finally:

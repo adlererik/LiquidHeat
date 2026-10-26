@@ -185,6 +185,8 @@ async def pick(p, scan_count):
         queries.append('''SELECT * FROM hl_accounts WHERE observed_at IS NULL AND next_check_at<=now()
           ORDER BY priority DESC,address LIMIT 1''')
     else:
+        queries.append('''SELECT * FROM hl_accounts WHERE discovery IN ('public_subaccount','public_vault','public_vault_child')
+          AND observed_at IS NULL AND next_check_at<=now() ORDER BY priority DESC,address LIMIT 1''')
         queries.append('''SELECT * FROM hl_accounts WHERE signaled_at>coalesce(observed_at,TIMESTAMPTZ '1970-01-01')
           AND signaled_at>now()-interval '1 hour' AND next_check_at<=now()
           ORDER BY activity_usd DESC,signaled_at DESC,address LIMIT 1''')

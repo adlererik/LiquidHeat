@@ -14,6 +14,14 @@ spec.loader.exec_module(m)
 
 
 class InstallerSafety(unittest.TestCase):
+    def test_backup_schema_gate_supports_older_valid_backups_and_rejects_future_or_broken(self):
+        for count in range(3,8):
+            self.assertTrue(m.valid_backup_checks('\n'.join([str(count)]+['t']*5+['apache']),7))
+        for count in [0,2,8]:
+            self.assertFalse(m.valid_backup_checks('\n'.join([str(count)]+['t']*5+['apache']),7))
+        self.assertFalse(m.valid_backup_checks('7\nt\nt\nf\nt\nt\napache',7))
+        self.assertFalse(m.valid_backup_checks('',7))
+
     def test_public_and_wildcard_addresses_rejected(self):
         for address in ('0.0.0.0', '8.8.8.8', '169.254.0.1', '::1'):
             with self.assertRaises(ValueError): m.valid_bind(address)

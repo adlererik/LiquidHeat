@@ -65,6 +65,7 @@ async def main():
         await collector.relations()
         assert await p.fetchval("SELECT count(*) FROM hl_accounts WHERE discovery IN ('public_subaccount','public_vault','public_vault_child')")==3
         assert len(await hyperliquid.current(p))==1
+        assert (await d.pick(p,4))['address'] in {addr(7000),addr(7001),addr(7002)},'Linked accounts must not wait behind the entire leaderboard'
         print('PASS linked subaccounts/vaults/children; investor equity excluded',flush=True)
         # Optional endpoint failure does not stop the independently scheduled account job.
         await collector.job('relations',AsyncMock(side_effect=RuntimeError('fixture')),30)

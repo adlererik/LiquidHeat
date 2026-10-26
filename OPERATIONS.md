@@ -91,4 +91,4 @@ docker load --input docker-images-linux-amd64.tar.gz
 ./liquidheat.sh doctor
 ```
 
-Repeating `install.sh` on an existing installation preserves its settings and skips image loading, so it is not a substitute for the explicit load step during an upgrade. The application applies additive migration 006; it does not reconstruct or rewrite past account states. The database image and volume remain the same. Refresh your browser to load the new account-discovery panel.
+Repeating `install.sh` on an existing installation preserves its settings and skips image loading, so it is not a substitute for the explicit load step during an upgrade. The application applies additive queue migrations 006 and 007; it does not reconstruct or rewrite past account states. The database image and volume remain the same. Refresh your browser to load the new account-discovery panel.
