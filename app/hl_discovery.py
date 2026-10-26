@@ -185,6 +185,12 @@ async def pick(p, scan_count):
         queries.append('''SELECT * FROM hl_accounts WHERE observed_at IS NULL AND next_check_at<=now()
           ORDER BY priority DESC,address LIMIT 1''')
     else:
+        if scan_count % 8 == 4:
+            # Source B: promptly inspect new whales instead of competing with
+            # already-known high-volume accounts for every signal opportunity.
+            queries.append('''SELECT * FROM hl_accounts WHERE observed_at IS NULL AND signaled_at IS NOT NULL
+              AND (largest_trade_usd>=50000 OR activity_usd>=50000) AND next_check_at<=now()
+              ORDER BY signaled_at DESC,address LIMIT 1''')
         queries.append('''SELECT * FROM hl_accounts WHERE discovery IN ('public_subaccount','public_vault','public_vault_child')
           AND observed_at IS NULL AND next_check_at<=now() ORDER BY priority DESC,address LIMIT 1''')
         queries.append('''SELECT * FROM hl_accounts WHERE signaled_at>coalesce(observed_at,TIMESTAMPTZ '1970-01-01')

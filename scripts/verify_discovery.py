@@ -56,6 +56,15 @@ async def main():
         assert row['observed_at']==before and row['position']==pos and row['error_count']==1
         assert row['next_check_at']>before
         print('PASS refresh/discovery fairness, error preservation and per-account retry',flush=True)
+        whale=addr(6500)
+        await d.register(p,[(whale,0.)],'public_btc_trade')
+        await p.execute('UPDATE hl_accounts SET largest_trade_usd=60000,signaled_at=now() WHERE address=$1',whale)
+        assert (await d.pick(p,4))['address']==whale,'A new large-fill account needs a first-check priority slot'
+        assert (await d.pick(p,8))['address']!=whale,'The reserved breadth slot must remain independent'
+        row=await p.fetchrow('SELECT * FROM hl_accounts WHERE address=$1',whale)
+        await d.observed(p,row,None,100000)
+        assert (await d.pick(p,4))['address']!=whale,'An empty result must back off normally'
+        print('PASS Source B large-fill first-check priority without starving breadth or bypassing empty-account backoff',flush=True)
         collector=hyperliquid.Collector(p,None);collector.mark=100000
         collector.info=AsyncMock(return_value=[{'subAccountUser':addr(7000)}])
         await collector.relations()
