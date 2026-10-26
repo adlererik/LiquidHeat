@@ -1,12 +1,40 @@
 import json
 import unittest
+from datetime import datetime,timedelta,timezone
 import numpy as np
 from app.hyperliquid import Collector
+from app.hl_api import display_step
 from app.hl_math import LeaderboardRows,btc_position,projection,pack,unpack,seed_row,large_trade_addresses
 
 
 def position(size=1,liq=90000,address='0x'+'1'*40):
     return {'address':address,'size_btc':size,'entry':100000.,'liquidation_price':liq,'leverage':10.,'margin_mode':'cross'}
+
+
+class AvailableHistoryResolution(unittest.TestCase):
+    def setUp(self):
+        self.now=datetime(2026,10,26,18,tzinfo=timezone.utc)
+
+    def test_young_history_keeps_native_detail_for_every_lookback(self):
+        first=self.now-timedelta(hours=18)
+        for days in (1,3,7,14,30):
+            self.assertEqual(display_step(self.now,self.now-timedelta(days=days),first),300)
+
+    def test_requested_window_bounds_mature_history(self):
+        first=self.now-timedelta(days=35)
+        for days,expected in ((1,300),(3,900),(7,2100),(14,4200),(30,9000)):
+            self.assertEqual(display_step(self.now,self.now-timedelta(days=days),first),expected)
+
+    def test_growing_history_aggregates_with_bounded_column_count(self):
+        start=self.now-timedelta(days=30)
+        for hours in (24.01,47,92,180,335,719):
+            first=self.now-timedelta(hours=hours)
+            step=display_step(self.now,start,first)
+            self.assertEqual(step%300,0)
+            self.assertLessEqual((self.now-first).total_seconds()/step,288)
+
+    def test_empty_history_is_native_without_fabrication(self):
+        self.assertEqual(display_step(self.now,self.now-timedelta(days=14),None),300)
 
 
 class HyperliquidMath(unittest.TestCase):

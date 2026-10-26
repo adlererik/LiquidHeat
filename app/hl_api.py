@@ -13,6 +13,12 @@ def validate(lookback,bucket):
     return periods[lookback]
 
 
+def display_step(now,start,first_snapshot):
+    """Keep native detail for short histories; target at most ~288 columns."""
+    span=max(0.,(now-max(start,first_snapshot or now)).total_seconds())
+    return max(300,int(np.ceil(span/(288*300)))*300)
+
+
 async def latest(p,bucket,positions=None):
     mark=await p.fetchrow("SELECT price,ts FROM live_marks WHERE exchange='hyperliquid'")
     if not mark: return {},[],None,{}
@@ -38,12 +44,14 @@ async def build(p,lookback,bucket,since=None):
 async def _build(p,lookback,bucket,since=None):
     days=validate(lookback,bucket)
     now=datetime.now(timezone.utc); start=now-timedelta(days=days)
+    # Use the full available lookback, even when returning only an incremental tail.
+    first=await p.fetchval('SELECT ts FROM hl_snapshots WHERE ts>=$1 ORDER BY ts LIMIT 1',start)
+    step=display_step(now,start,first)
     if since is not None:
         try: start=max(start,datetime.fromtimestamp(since/1000,timezone.utc))
         except (ValueError,OverflowError,OSError): raise HTTPException(422,'Invalid since timestamp')
-    step=max(300,int(np.ceil(days*86400/288/300))*300)
-    rows=await p.fetch('''SELECT DISTINCT ON(time_bucket($1::interval,ts)) ts,mark,grid_start,grid_n,matrix,audit
-      FROM hl_snapshots WHERE ts>=$2 ORDER BY time_bucket($1::interval,ts),ts DESC''',timedelta(seconds=step),start)
+    rows=await p.fetch('''SELECT DISTINCT ON(time_bucket($1::interval,ts,TIMESTAMPTZ '1970-01-01')) ts,mark,grid_start,grid_n,matrix,audit
+      FROM hl_snapshots WHERE ts>=$2 ORDER BY time_bucket($1::interval,ts,TIMESTAMPTZ '1970-01-01'),ts DESC''',timedelta(seconds=step),start)
     states={int(r['ts'].timestamp())//step*step+step:(r['grid_start'],unpack(r['matrix'],r['grid_n']),r['mark']) for r in rows}
     current_positions=await hyperliquid.current(p,now)
     profile,provenance,mark,audit=await latest(p,bucket,current_positions)
@@ -67,7 +75,7 @@ async def _build(p,lookback,bucket,since=None):
     ps=sorted(profile); cumlong=np.cumsum([profile[x][0] for x in ps[::-1]])[::-1]; cumshort=np.cumsum([profile[x][1] for x in ps])
     profiles=[{'price':x,'long_usd':round(profile[x][0],2),'short_usd':round(profile[x][1],2),
                'cumulative_long_usd':round(float(cumlong[i]),2),'cumulative_short_usd':round(float(cumshort[i]),2)} for i,x in enumerate(ps)]
-    candles=await p.fetch('''SELECT time_bucket($1::interval,ts) t,first(o,ts) o,max(h) h,min(l) l,last(c,ts) c
+    candles=await p.fetch('''SELECT time_bucket($1::interval,ts,TIMESTAMPTZ '1970-01-01') t,first(o,ts) o,max(h) h,min(l) l,last(c,ts) c
       FROM candles WHERE exchange='hyperliquid' AND kind='trade' AND interval_s=300 AND ts>=$2 GROUP BY t ORDER BY t''',timedelta(seconds=step),start)
     coverage=await hyperliquid.status(p,current_positions)
     return {'source':'hyperliquid','model_version':METHOD,'estimated':False,'sampled':True,'incremental':since is not None,

@@ -169,6 +169,7 @@ function learningView(d){
  $('learning-status').dataset.protocol=d.protocol;$('learning-status').dataset.audited=ready;
 }
 function mergeIncremental(old,part){
+ if(old.time_resolution_s!==part.time_resolution_s)throw Error('Time resolution changed; a full refresh is required.');
  const days={'24h':1,'3d':3,'7d':7,'14d':14,'30d':30}[lookback],cutoff=Date.now()-days*86400000;
  const times=[...new Set([...old.times,...part.times])].filter(t=>t>=cutoff).sort((a,b)=>a-b),prices=[...new Set([...old.prices,...part.prices])].sort((a,b)=>a-b);
  const ti=new Map(times.map((v,i)=>[v,i])),pi=new Map(prices.map((v,i)=>[v,i])),replace=new Set(part.times);
@@ -185,7 +186,15 @@ async function refresh(incremental=false){
  const scope=query().toString(),q=query();
  const delta=incremental&&data&&dataScope===scope&&data.times.length;
  if(delta)q.set('since',String(data.times.at(-1)-data.time_resolution_s*1000));
- try{const r=await fetch('/api/v1/heatmap?'+q);if(!r.ok)throw Error(`Heatmap API ${r.status}`);const part=await r.json();if(query().toString()!==scope){pendingRefresh=true;return;}data=delta?mergeIncremental(data,part):part;dataScope=scope;summary();chartData();await magnets();}
+ try{let r=await fetch('/api/v1/heatmap?'+q);if(!r.ok)throw Error(`Heatmap API ${r.status}`);let part=await r.json();if(query().toString()!==scope){pendingRefresh=true;return;}
+  let merge=delta;
+  if(delta&&data.time_resolution_s!==part.time_resolution_s){
+   // Growing history can change aggregation. Replace the whole grid so native
+   // and coarser columns are never mixed or counted twice.
+   q.delete('since');r=await fetch('/api/v1/heatmap?'+q);if(!r.ok)throw Error(`Heatmap API ${r.status}`);part=await r.json();merge=false;
+   if(query().toString()!==scope){pendingRefresh=true;return;}
+  }
+  data=merge?mergeIncremental(data,part):part;dataScope=scope;summary();chartData();await magnets();}
  catch(e){toast(e.message);$('empty').hidden=!!data?.matrix.length;}
  finally{refreshing=false;if(pendingRefresh){pendingRefresh=false;setTimeout(()=>refresh(true),1000);}}
 }

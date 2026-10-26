@@ -60,11 +60,11 @@ Run these commands **on the server that will host LiquidHeat**, not on a separat
 
 ```bash
 mkdir -p ~/liquidheat-download && cd ~/liquidheat-download
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.0/LiquidHeat-v1.2.0-linux-amd64.tar.gz
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.0/SHA256SUMS
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.1/LiquidHeat-v1.2.1-linux-amd64.tar.gz
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.1/SHA256SUMS
 sha256sum --check SHA256SUMS
 # Continue only if the check prints OK.
-tar -xzf LiquidHeat-v1.2.0-linux-amd64.tar.gz
+tar -xzf LiquidHeat-v1.2.1-linux-amd64.tar.gz
 cd LiquidHeat
 ./install.sh
 ```

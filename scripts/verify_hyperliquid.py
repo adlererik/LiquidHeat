@@ -37,6 +37,28 @@ async def main():
             for c in result['clld']:assert abs(c['usd']-(c['long_usd']-c['short_usd']))<.01 and -1<=c['normalized']<=1
             assert address not in json.dumps(result,default=str)
         print('PASS bucket conservation, CLLD, API privacy and separate method',flush=True)
+        native=await hl_api.build(p,'24h',25)
+        for lookback in ('3d','7d','14d','30d'):
+            young=await hl_api.build(p,lookback,25)
+            assert young['time_resolution_s']==300
+            assert young['times']==native['times'] and young['matrix']==native['matrix']
+        # Two snapshots straddle a Unix-origin boundary but share a default
+        # Timescale-origin bucket at 70m. Both distinct states must survive.
+        boundary=int((now-timedelta(days=13,hours=20)).timestamp())//4200*4200
+        old_times=[datetime.fromtimestamp(boundary+offset,timezone.utc) for offset in (-300,300)]
+        for ts in old_times:
+            await p.execute('INSERT INTO hl_snapshots(ts,mark,grid_start,grid_n,matrix,constituents,audit) VALUES($1,100000,$2,$3,$4,$5,$6)',ts,grid,a.shape[1],pack(a),zlib.compress(json.dumps(selected).encode()),audit)
+            await p.execute("INSERT INTO candles(ts,exchange,kind,interval_s,o,h,l,c) VALUES($1,'hyperliquid','trade',300,100000,100100,99900,100050)",ts)
+        mature=await hl_api.build(p,'14d',25)
+        tail=await hl_api.build(p,'14d',25,int((now-timedelta(minutes=5)).timestamp()*1000))
+        assert mature['time_resolution_s']==tail['time_resolution_s']==4200
+        ends={(int(t.timestamp())//4200*4200+4200)*1000 for t in old_times}
+        assert ends.issubset(set(mature['times']))
+        assert {r[0] for r in mature['candles']}==ends
+        assert all(t%4200000==0 for t in mature['times'])
+        await p.execute('DELETE FROM hl_snapshots WHERE ts=ANY($1::timestamptz[])',old_times)
+        await p.execute("DELETE FROM candles WHERE exchange='hyperliquid'")
+        print('PASS available-history resolution, stable incremental step and candle/snapshot UTC grid alignment',flush=True)
         await p.execute('UPDATE hl_accounts SET observed_at=$1',now-timedelta(minutes=16))
         assert not await hyperliquid.current(p)
         result=await hl_api.build(p,'24h',25);assert not result['profile'] and result['matrix']

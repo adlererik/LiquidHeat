@@ -15,3 +15,10 @@ Verified on Linux amd64 using isolated Docker containers on Debian. No applicati
 These are engineering checks, not proof of predictive accuracy, complete discovery, exchange feed completeness or statistical equivalence to Glassnode. Broader discovery needs time to scan candidates. Runtime images retain the existing pinned open-source dependencies; no new package was added.
 
 The prebuilt amd64 bundle also installed into a separate disposable four-container project with real exchange ingestion. A full backup restored successfully into a disposable database. Existing production service/container identities were preserved; project engine restart recovery retained the queue and deduplication store without re-downloading the leaderboard.
+
+
+## v1.2.1 patch verification
+
+The available-history display fix passed 69 application unit/numerical tests on Debian and 80 public-distribution tests. Seven disposable-database Hyperliquid integration groups passed, including native detail for every young-history lookback, a stable interval for incremental tails, and explicit UTC alignment across 70-minute bucket boundaries. The frontend transition test confirms that an interval change replaces the full grid, while unchanged intervals retain incremental updates. Six navigation checks and five-resolution raster conservation on real market output also passed.
+
+The API and frontend were updated independently; the existing collector and database kept running. This patch changes read-time aggregation and browser refresh behavior only. The v1.2.0 cold-install and backup checks above describe that earlier release; they were not repeated for this presentation-only patch.
