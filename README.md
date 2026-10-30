@@ -16,6 +16,10 @@ Live BTC perpetual liquidation heatmaps · Hyperliquid + three CEX venues · Aud
 
 *Actual v1.2 dashboard with real reported positions and discovery progress. Earlier account history is blank. The account sample is incomplete; no positions are fabricated or extrapolated.*
 
+![LiquidHeat v1.3 narrow-kernel CEX scenario with real candles and liquidation overhang](docs/images/cex-narrow.png)
+
+*Actual v1.3 CEX comparison, with Original weights/decay/collateral preserved. Narrower kernels sharpen individual concentrations; accumulated cohorts can still overlap. This is an uncalibrated scenario, not a copy of private exchange positions.*
+
 <details><summary>See the separate CEX estimate dashboard</summary>
 
 ![LiquidHeat dashboard showing real BTC market observations, modeled concentration bands, candlesticks and the side profile](docs/images/dashboard.jpg)
@@ -102,7 +106,7 @@ For a server hosting other services, read the [shared-server precautions](docs/I
 
 **Navigation:** drag horizontally/vertically to pan; scroll over the chart to zoom time; **Shift + scroll** to zoom price. Scrolling over the right-hand profile zooms price. **Price + / −** change the price scale. **Reset view** returns to the full selected window and fits the candles.
 
-Color scaling uses the **98th percentile** of displayed positive exposure: this keeps one extreme bucket from making everything else dark. The intensity slider hides weaker bands; it does not create or delete positions. Changing filters can change relative colors. Compare the USD values as well as brightness.
+Hyperliquid color scaling uses its original **98th percentile**. CEX uses the **98.5th percentile** of positive cells at least 1% of the selected maximum, so tiny Gaussian tails do not set the color ceiling. The intensity slider hides weaker bands; it does not create or delete positions. Changing filters can change relative colors. Compare the USD values as well as brightness.
 
 ![A closer view of the real heatmap, aligned candles and long/short price profile](docs/images/chart-detail.jpg)
 

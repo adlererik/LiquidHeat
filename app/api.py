@@ -146,7 +146,7 @@ async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',levera
     profiles=[{'price':x,'long_usd':round(profile[x][0],2),'short_usd':round(profile[x][1],2),'cumulative_long_usd':round(float(cumlong[i]),2),'cumulative_short_usd':round(float(cumshort[i]),2)} for i,x in enumerate(ps)]
     clld=[{'ts':(t+step)*1000,'long_usd':float(v[0]),'short_usd':float(v[1]),'usd':float(v[0]-v[1]),'normalized':float((v[0]-v[1])/max(1,v.sum()))} for t,v in zip(times,side_totals)]
     mark=float(np.mean([v['mark'] for v in provenance])) if provenance else await p.fetchval('SELECT avg(price) FROM live_marks WHERE exchange=ANY($1::text[])',ex)
-    candidate_health=[dict(r) for r in await p.fetch('SELECT exchange,last_ts,status,detail,updated_at FROM cex_runs WHERE exchange=ANY($1::text[])',ex)] if cex_model!='baseline' else []
+    candidate_health=jsonable_encoder([dict(r) for r in await p.fetch('SELECT exchange,last_ts,status,detail,updated_at FROM cex_runs WHERE exchange=ANY($1::text[])',ex)]) if cex_model!='baseline' else []
     return {'source':'cex','cex_model':cex_model,'cex_health':candidate_health,'model_version':VERSION if cex_model=='baseline' else scenario_version(cex_model),'estimated':True,'incremental':since is not None,'times':display_times,'prices':prices,'matrix':matrix,
             'candles':cs,'candle_exchange':candle_exchange,'profile':profiles,'clld':clld,'mark':mark,
             'normalization_p98':norm,'normalization':NORMALIZATION,'time_resolution_s':step,'bucket':bucket,'provenance':provenance,
@@ -168,7 +168,9 @@ async def heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str
             return _heatmap_cache['response']
         result=await hl_api.build(p,lookback,bucket,since) if source=='hyperliquid' else await build_heatmap(lookback,bucket,exchanges,leverage,since,cex_model)
         _heatmap_cache.clear()
-        response=JSONResponse(jsonable_encoder(result))
+        # CEX matrices already contain Python JSON primitives. Walking hundreds
+        # of thousands of cells again adds CPU latency without converting data.
+        response=JSONResponse(jsonable_encoder(result) if source=='hyperliquid' else result)
         _heatmap_cache.update(key=key,response=response)
         return response
 

@@ -63,7 +63,7 @@ The candle venue is labeled in the footer. It is a selected exchange's trade ser
 | Normalized CLLD | `(long − short) / (long + short)`, bounded −1 to +1 when total exposure is positive |
 | Magnet / concentration zone | A local modeled cluster ranked for inspection; no validated attraction mechanism is implied |
 | Z-score | Distance above the current distribution's mean, measured in standard deviations; not a trading success probability |
-| Percentile | Rank within a set. The 98th percentile supplies the color ceiling so extreme outliers do not flatten contrast |
+| Percentile | Rank within a set. The color ceiling is the 98th percentile for Hyperliquid; CEX uses the 98.5th percentile of significant positive cells |
 | Prior | An assumption used when observations do not identify a quantity; alpha and leverage weights are examples |
 | Checkpoint | Saved ingestion/model progress allowing recovery without starting from zero |
 | Backfill | Download genuinely available older observations; not recreation of unavailable private history |
@@ -92,3 +92,10 @@ Exchange APIs differ: candles can reach 30 days where available; OKX open-intere
 ## Public-account discovery is a sample
 
 The free leaderboard provides large-account candidates. A public BTC trade stream adds both counterparties of fills ≥$50,000. A fill can close exposure, so only an actual subsequent position query adds a liquidation threshold. We rank at most 1,000 BTC positions among discovered accounts checked within 15 minutes. This does not establish the largest 1,000 positions in the whole market. Diagnostics expose current sample size, checked/discovered counts, sampled gross OI fraction, null/out-of-grid prices and discovery health. See [methodology](HYPERLIQUID.md).
+
+
+## Compare CEX assumptions
+
+In **CEX estimates**, the **Model** menu starts at Original. **Narrow kernels** concentrates each inferred entry cohort more tightly while preserving Original leverage weights, decay and extra collateral scenarios. **Replay reference** uses the original math on the same captured observations as the alternatives. Three separate sensitivity scenarios test no extra collateral, higher leverage weights and faster decay; they are not combined into a supposedly optimized model. Their history is hourly to conserve disk, while their current side profiles use the latest five-minute checkpoints. Narrow history keeps five-minute detail for seven days and 15-minute samples for older states.
+
+Changing model assumptions can change surviving exposure and CLLD, not just the picture. Sharper bands do not prove that liquidation amounts or future prices are more accurate. Hyperliquid has no CEX Model menu and keeps its own reported thresholds. See [the experiment details](CEX_EXPERIMENTS.md).

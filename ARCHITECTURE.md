@@ -1,6 +1,6 @@
 # Architecture
 
-LiquidHeat runs four containers in a project-specific Docker Compose network. Only Nginx binds a selected loopback/LAN port. PostgreSQL and the API have no host port bindings.
+LiquidHeat runs five containers in a project-specific Docker Compose network. Only Nginx binds a selected loopback/LAN port. PostgreSQL and the API have no host port bindings.
 
 ```mermaid
 flowchart TB
