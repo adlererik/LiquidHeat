@@ -9,6 +9,7 @@ import zlib
 import numpy as np
 from scipy.special import ndtr
 from app.config import LEVERAGES, VERSION
+from app.cex_scenarios import SCENARIOS,version as scenario_version
 
 WEIGHTS = np.array([.20, .35, .25, .15, .05])
 
@@ -64,6 +65,56 @@ def decode_array(b, shape):
     return np.frombuffer(zlib.decompress(b), dtype='<f4').reshape(shape).astype(np.float64)
 
 
+def scenario_projection(exposure,buckets,pts,total,options,new,unit,phi,weights,high,low,mark,brackets,fee,profile):
+    """Batch experimental cohorts in original order; cap temporary work at 128 cohorts.
+
+    The legacy path below remains separate. Scatter-add retains each cohort's
+    bucket amounts, without a dense price-by-price projection or renormalization.
+    """
+    margins=options.margins;n=len(margins)
+    entry=np.repeat(np.asarray([p for p,v in pts],dtype=float),3*n)
+    volume=np.repeat(np.asarray([v for p,v in pts],dtype=float),3*n)
+    sizes=np.tile(np.repeat([10000.,50000.,250000.],n),len(pts))
+    size_weights=np.tile(np.repeat([.35,.45,.20],n),len(pts))
+    extra=np.tile([x for x,w in margins],len(pts)*3)
+    collateral_weights=np.tile([w for x,w in margins],len(pts)*3)
+    rates=[];deductions=[]
+    for size in (10000.,50000.,250000.):
+        b=next((b for b in (brackets or []) if b['floor']<=size<b['cap']),None)
+        rates.append(b['mmr'] if b else .004);deductions.append(b.get('deduction',0.) if b else 0.)
+    base=len(entry)
+    entry=np.tile(entry,10);volume=np.tile(volume,10);sizes=np.tile(sizes,10)
+    size_weights=np.tile(size_weights,10);extra=np.tile(extra,10);collateral_weights=np.tile(collateral_weights,10)
+    side=np.repeat(np.repeat([0,1],5),base);tier=np.repeat(np.tile(np.arange(5),2),base)
+    leverage=np.repeat(np.tile(np.array(LEVERAGES,dtype=float),2),base)
+    m=np.tile(np.repeat(rates,n),len(pts)*10)+fee
+    deduction=np.tile(np.repeat(deductions,n),len(pts)*10);q=sizes/entry
+    valid=m<1/leverage
+    mu=np.where(side==0,np.maximum(0.,(entry*(1-1/leverage-extra)-deduction/q)/np.where(valid,1-m,1.)),
+                (entry*(1+1/leverage+extra)+deduction/q)/(1+m))
+    sigma=np.maximum(np.maximum((high-low)/2.2,entry*.07/leverage),12.5)
+    if options.conditional:
+        sigma=np.maximum(entry*.00035,12.5) if profile else np.maximum(np.minimum((high-low)/3.5,entry*.0012)/(1+1/leverage),12.5)
+    amount=new*unit*phi[side]*weights[side,tier]*volume/total*size_weights*collateral_weights
+    allocated=np.zeros(2);flat=exposure.reshape(-1)
+    for begin in range(0,len(entry),128):
+        sl=slice(begin,begin+128);muv=mu[sl];sig=sigma[sl]
+        start=np.searchsorted(buckets,muv-options.support*sig-12.5)
+        end=np.searchsorted(buckets,muv+options.support*sig+12.5,side='right')
+        count=np.where(valid[sl],end-start,0)
+        if not count.sum():continue
+        cohort=np.repeat(np.arange(len(count)),count)
+        offsets=np.arange(int(count.sum()))-np.repeat(np.cumsum(count)-count,count)
+        index=np.repeat(start,count)+offsets;local=buckets[index]
+        kernel=np.maximum(0.,ndtr((local+12.5-muv[cohort])/sig[cohort])-ndtr((local-12.5-muv[cohort])/sig[cohort]))
+        kernel*=np.where(side[sl][cohort]==0,local<mark,local>mark)
+        values=amount[sl][cohort]*kernel
+        target=(side[sl][cohort]*5+tier[sl][cohort])*len(buckets)+index
+        np.add.at(flat,target,values)
+        allocated+=np.bincount(side[sl][cohort],weights=values,minlength=2)
+    return allocated
+
+
 @dataclass
 class State:
     buckets: np.ndarray
@@ -73,12 +124,14 @@ class State:
     alpha: float = .04
     prior_oi: float = 0.
     steps: int = 0
+    scenario: str = 'baseline'
 
     @classmethod
-    def empty(cls, mark):
+    def empty(cls, mark, scenario='baseline'):
         # Fixed grid per replay epoch. Tail losses are measured, never rebinned silently.
         b = np.arange(np.floor(mark*.5/25)*25, np.ceil(mark*1.5/25)*25+25, 25.)
-        return cls(b, np.zeros((2, 5, len(b))))
+        if scenario!='baseline' and scenario not in SCENARIOS:raise ValueError('Unknown CEX scenario')
+        return cls(b, np.zeros((2, 5, len(b))),scenario=scenario)
 
     def sweep(self, low, high):
         """First passage on the dispersed conditional threshold distribution.
@@ -105,7 +158,8 @@ class State:
             raise ValueError('negative OI/volume')
         dt = 300 if self.last_ts == 0 else max(0, ts-self.last_ts)
         # Decay occurs exactly once per elapsed five-minute interval.
-        self.exposure *= .9996 ** (dt/300)
+        options=SCENARIOS.get(self.scenario)
+        self.exposure *= (options.decay if options else .9996) ** (dt/300)
         swept = self.sweep(mark_low, mark_high)
         delta = oi_native-previous_oi_native
         valid = abs(delta) <= volume_native * 1.05 + 1e-8
@@ -116,7 +170,8 @@ class State:
         survival = max(0., 1-residual/max(previous_oi_native, 1e-12))
         self.exposure *= survival
         phi = vulnerability(delta, volume_native, buy_ratio, ratio_change, funding)
-        w = np.array(weights if weights is not None else [WEIGHTS, WEIGHTS], dtype=float)
+        default_weights=options.weights if options else WEIGHTS
+        w = np.array(weights if weights is not None else [default_weights, default_weights], dtype=float)
         if w.shape == (5,):
             w = np.tile(w, (2, 1))
         if w.shape != (2, 5) or np.any(w < 0) or not np.allclose(w.sum(axis=1), 1):
@@ -127,28 +182,35 @@ class State:
         if total <= 0:
             raise ValueError('empty volume profile')
         allocated = np.zeros(2)
-        for side in (0, 1):
-            for k, lev in enumerate(LEVERAGES):
-                for p, v in pts:
-                    # Size/collateral are scenario priors, NOT known account facts.
-                    for size, size_weight in ((10000., .35), (50000., .45), (250000., .20)):
-                        bracket = next((b for b in (brackets or []) if b['floor'] <= size < b['cap']), None)
-                        mmr = bracket['mmr'] if bracket else .004
-                        deduction = bracket.get('deduction', 0.) if bracket else 0.
-                        for extra, cw in ((0., .65), (.01, .25), (.04, .10)):
-                            mu = liquidation_price(p, lev, side, mmr, deduction, size, fee, extra)
-                            if mu is None:
-                                continue
-                            sigma = max((high-low)/2.2, p*.07/lev, 12.5)
-                            # Evaluate the numerically relevant support only; omitted mass < 2e-15.
-                            start=int(np.searchsorted(self.buckets,mu-8.5*sigma-12.5))
-                            end=int(np.searchsorted(self.buckets,mu+8.5*sigma+12.5,side='right'))
-                            local=self.buckets[start:end]
-                            kernel=integrated_kernel(local,mu,sigma)
-                            kernel *= (local < mark_close if side == 0 else local > mark_close)
-                            amount = new*contract_btc*phi[side]*w[side,k]*v/total*size_weight*cw
-                            self.exposure[side,k,start:end] += amount*kernel
-                            allocated[side] += amount*kernel.sum()
+        if options:
+            allocated=scenario_projection(self.exposure,self.buckets,pts,total,options,new,contract_btc,phi,w,high,low,mark_close,brackets,fee,profile)
+        else:
+            for side in (0, 1):
+                for k, lev in enumerate(LEVERAGES):
+                    for p, v in pts:
+                        # Size/collateral are scenario priors, NOT known account facts.
+                        for size, size_weight in ((10000., .35), (50000., .45), (250000., .20)):
+                            bracket = next((b for b in (brackets or []) if b['floor'] <= size < b['cap']), None)
+                            mmr = bracket['mmr'] if bracket else .004
+                            deduction = bracket.get('deduction', 0.) if bracket else 0.
+                            for extra, cw in (options.margins if options else ((0., .65), (.01, .25), (.04, .10))):
+                                mu = liquidation_price(p, lev, side, mmr, deduction, size, fee, extra)
+                                if mu is None:
+                                    continue
+                                sigma = max((high-low)/2.2, p*.07/lev, 12.5)
+                                if options and options.conditional:
+                                    sigma=max(p*.00035,12.5) if profile else max(min((high-low)/3.5,p*.0012)/(1+1/lev),12.5)
+                                support=options.support if options else 8.5
+                                # At 4 sigma, omitted normal mass is at most 6.335e-5;
+                                # bucket padding reduces it further. Never pile it at an edge.
+                                start=int(np.searchsorted(self.buckets,mu-support*sigma-12.5))
+                                end=int(np.searchsorted(self.buckets,mu+support*sigma+12.5,side='right'))
+                                local=self.buckets[start:end]
+                                kernel=integrated_kernel(local,mu,sigma)
+                                kernel *= (local < mark_close if side == 0 else local > mark_close)
+                                amount = new*contract_btc*phi[side]*w[side,k]*v/total*size_weight*cw
+                                self.exposure[side,k,start:end] += amount*kernel
+                                allocated[side] += amount*kernel.sum()
         # The vulnerable subset cannot exceed gross OI on either side.
         cap = oi_native*contract_btc
         for side in (0, 1):
@@ -162,12 +224,14 @@ class State:
                 'allocated_btc': allocated.tolist(), 'phi': phi.tolist(),
                 'entry_method': 'observed_volume_profile' if profile else 'weighted_typical_price',
                 'brackets': 'public_exchange' if brackets else 'unverified_mmr_prior',
-                'weights': w.tolist(), 'model_version': VERSION}
+                'weights': w.tolist(), 'model_version': scenario_version(self.scenario) if options else VERSION}
 
     def checkpoint(self):
-        return json.dumps({'buckets': self.buckets.tolist(), 'last_ts': self.last_ts,
+        meta={'buckets': self.buckets.tolist(), 'last_ts': self.last_ts,
                            'last_mark': self.last_mark, 'alpha': self.alpha,
-                           'prior_oi': self.prior_oi, 'steps': self.steps})
+                           'prior_oi': self.prior_oi, 'steps': self.steps}
+        if self.scenario!='baseline':meta['scenario']=self.scenario
+        return json.dumps(meta)
 
     @classmethod
     def restore(cls, meta, data):

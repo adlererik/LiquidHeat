@@ -16,4 +16,4 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.title="LiquidHeat" \
       org.opencontainers.image.authors="Erik Adler" \
       org.opencontainers.image.source="https://github.com/adlererik/LiquidHeat" \
-      org.opencontainers.image.version="1.2.1"
+      org.opencontainers.image.version="1.3.0"

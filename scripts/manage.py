@@ -16,7 +16,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / '.liquidheat-install.json'
-IMAGES = ('liquidheat-app:1.2.1', 'liquidheat-web:1.2.1', 'liquidheat-timescale:2.19.3-pg16')
+IMAGES = ('liquidheat-app:1.3.0', 'liquidheat-web:1.3.0', 'liquidheat-timescale:2.19.3-pg16')
 
 
 def run(args, **kw):
@@ -71,8 +71,8 @@ def preflight():
         free = min(free, shutil.disk_usage(docker_root).free)
     mem = next(int(l.split()[1])*1024 for l in Path('/proc/meminfo').read_text().splitlines() if l.startswith('MemAvailable:'))
     print(f'Available RAM: {mem/1024**3:.1f} GiB; available storage: {free/1024**3:.1f} GiB', flush=True)
-    if free < 6*1024**3 or mem < 1400*1024**2:
-        raise RuntimeError('Need at least 6 GiB free disk and 1,400 MiB available RAM. Free capacity without touching other services first.')
+    if free < 8*1024**3 or mem < 1700*1024**2:
+        raise RuntimeError('Need at least 8 GiB free disk and 1,700 MiB available RAM. Free capacity without touching other services first.')
 
 
 def load_images():

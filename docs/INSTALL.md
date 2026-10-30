@@ -1,10 +1,10 @@
 # Beginner installation guide
 
-Think of the server as the computer that stays on and does the work. Your other computer needs only a browser. Docker runs four separate pieces together: a database, a market-data/model worker, an API and a web server. You install the release **on the server**.
+Think of the server as the computer that stays on and does the work. Your other computer needs only a browser. Docker runs five separate pieces together: a database, the original market-data/model worker, a separate CEX experiment worker, an API and a web server. You install the release **on the server**.
 
 ## 1. Check the server
 
-The prebuilt bundle supports Linux x86-64 (also called amd64, including Intel and AMD CPUs). Check with `uname -m`: `x86_64` is supported. Recommended: 4 GB RAM, 2+ cores, 10 GB free storage plus growth/backup headroom. At installation the checks require 1,400 MiB available RAM and 6 GiB free disk. Debian with systemd is the verified platform. Other Linux distributions may work; they are not equally tested.
+The prebuilt bundle supports Linux x86-64 (also called amd64, including Intel and AMD CPUs). Check with `uname -m`: `x86_64` is supported. Recommended: 4 GB RAM, 2+ cores, 12 GB free storage plus growth/backup headroom. At installation the checks require 1,700 MiB available RAM and 8 GiB free disk. Debian with systemd is the verified platform. Other Linux distributions may work; they are not equally tested.
 
 You need SSH access if the server has no keyboard/display. From your own computer, connect using `ssh YOUR_USER@YOUR_SERVER`; replace both placeholders. Everything below runs in that server shell. No exchange account, API key, credit card, registry login or paid service is required.
 

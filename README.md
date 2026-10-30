@@ -28,7 +28,7 @@ Live BTC perpetual liquidation heatmaps · Hyperliquid + three CEX venues · Aud
 
 LiquidHeat offers two separate heatmap methods: **Hyperliquid positions** groups public account-reported liquidation thresholds; **CEX estimates** infers vulnerability from Binance, Bybit and OKX observations. The methods never blend their amounts. The Hyperliquid sample is incomplete and is not a verified global top 1,000. Explore price levels, follow the candles through time, compare leverage scenarios, and inspect how much evidence supports an experimental liquidation-flow forecast.
 
-It runs as four isolated Docker containers on hardware you already own. The browser is just a viewer: collection, calculation, historical storage and learning continue when you close it.
+It runs as five isolated Docker containers on hardware you already own. The browser is just a viewer: collection, calculation, historical storage and learning continue when you close it.
 
 | Explore | What you get |
 |---|---|
@@ -38,6 +38,7 @@ It runs as four isolated Docker containers on hardware you already own. The brow
 | Aligned candles and mark price | Trade-price candles and an optional mark overlay on shared time/price coordinates |
 | Price profile | Long/short exposure by price, with a cumulative view |
 | Flexible resolution | $25, $50, $100 or $200 price buckets |
+| Separate CEX comparisons | Narrow kernels, replay reference and three individual sensitivity scenarios; Original remains the default |
 | CEX exchange and leverage filters | Binance / Bybit / OKX; 10×, 25×, 50×, 100× and 125× scenarios |
 | Easy navigation | Drag to pan, independent price/time zoom, **Fit price** for candles and **Fit liquidity** for all bands |
 | Concentration zones | Top estimated clusters, relative intensity, distance and descriptive Z-score |
@@ -50,9 +51,9 @@ It runs as four isolated Docker containers on hardware you already own. The brow
 
 ## Install without building an image
 
-The easiest option is the **Linux x86-64 / amd64 Docker bundle** on the [Releases page](https://github.com/adlererik/LiquidHeat/releases/latest). It contains all three prebuilt images: application, Nginx frontend and the Apache-only TimescaleDB database. Engine and API share the application image.
+The easiest option is the **Linux x86-64 / amd64 Docker bundle** on the [Releases page](https://github.com/adlererik/LiquidHeat/releases/latest). It contains all three prebuilt images: application, Nginx frontend and the Apache-only TimescaleDB database. Engine, API and the CEX comparison worker share the application image.
 
-You need a Linux server, Docker Engine with Compose, Python 3, `curl`, `tar` and `sha256sum`, an Internet connection to the public exchanges, and available capacity. Recommended starting point: **4 GB RAM, 2+ CPU cores and 10 GB free disk**; the installer requires at least 1,400 MiB *available* RAM and 6 GiB free storage. Budget extra space for databases and local backups. Current prebuilt release: **amd64 only**. Docker Desktop and a registry account are unnecessary.
+You need a Linux server, Docker Engine with Compose, Python 3, `curl`, `tar` and `sha256sum`, an Internet connection to the public exchanges, and available capacity. Recommended starting point: **4 GB RAM, 2+ CPU cores and 12 GB free disk**; the installer requires at least 1,700 MiB *available* RAM and 8 GiB free storage. Budget extra space for databases and local backups. Current prebuilt release: **amd64 only**. Docker Desktop and a registry account are unnecessary.
 
 If `curl` or Python is missing on Debian, install the prerequisites with `sudo apt-get install -y curl python3`. See the beginner guide if Docker is missing.
 
@@ -60,11 +61,11 @@ Run these commands **on the server that will host LiquidHeat**, not on a separat
 
 ```bash
 mkdir -p ~/liquidheat-download && cd ~/liquidheat-download
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.1/LiquidHeat-v1.2.1-linux-amd64.tar.gz
-curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.2.1/SHA256SUMS
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.3.0/LiquidHeat-v1.3.0-linux-amd64.tar.gz
+curl -fLO https://github.com/adlererik/LiquidHeat/releases/download/v1.3.0/SHA256SUMS
 sha256sum --check SHA256SUMS
 # Continue only if the check prints OK.
-tar -xzf LiquidHeat-v1.2.1-linux-amd64.tar.gz
+tar -xzf LiquidHeat-v1.3.0-linux-amd64.tar.gz
 cd LiquidHeat
 ./install.sh
 ```
@@ -237,3 +238,10 @@ LiquidHeat is independent research software by **Erik Adler**, released under **
 Reported liquidation streams can be incomplete; exchange access and historical retention vary by region and venue. USDT is treated approximately as USD. There is no guaranteed forecast improvement, confidence-calibrated private exposure estimate, profit claim, or claim of pixel-perfect equivalence.
 
 Please report reproducible software issues without uploading `.env`, database dumps, private host details or unredacted diagnostics.
+
+
+### CEX model comparisons
+
+The CEX-only Model selector offers Original, Narrow kernels, a captured-input replay reference and three separately labelled sensitivity cases. Narrow kernels retains the original leverage weights, decay and collateral mixture. Other cases individually test no extra collateral, higher leverage weights or faster decay. Original remains the default. Hyperliquid keeps its reported-position view and original color normalization. The Bybit learner continues using Original features.
+
+All candidates replay actual stored inputs into separate tables under a restricted SQL role. No original checkpoints, Hyperliquid or learning histories are cleared. Narrow history is five-minute; the research reference and sensitivity histories are hourly to bound disk, with five-minute current profiles. See [CEX_EXPERIMENTS.md](docs/CEX_EXPERIMENTS.md) for assumptions, replay verification, resource budgets and limitations.

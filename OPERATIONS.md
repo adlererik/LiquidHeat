@@ -92,3 +92,10 @@ docker load --input docker-images-linux-amd64.tar.gz
 ```
 
 Repeating `install.sh` on an existing installation preserves its settings and skips image loading, so it is not a substitute for the explicit load step during an upgrade. The application applies additive queue migrations 006 and 007; it does not reconstruct or rewrite past account states. The database image and volume remain the same. Refresh your browser to load the new account-discovery panel.
+
+
+## CEX experiments — v1.3
+
+The fifth service, cex-worker, has a 256 MiB/0.50 CPU ceiling and one normal SQL connection. Its restricted role cannot write raw inputs, original states, Hyperliquid or learning tables. Migration 008 creates that role and new cex_* tables. Original and learning remain on conservation-v1.0. Only the candidate worker pauses at DB >2.5 GiB, research relations >512 MiB or filesystem free <5 GiB; existing engine guards and service limits remain unchanged. Monitor actual Docker-volume storage too.
+
+Use GET /api/v1/cex/models for progress, configurations and shape metrics. Research replay can take time on a shared server; Original and Hyperliquid remain usable during it. Stop only cex-worker to pause comparisons; select Original for the existing calculation. Snapshots have a 35-day window, with narrow states sampled at 15 minutes after seven days. Exact batch anchors and a 36-day input safety buffer permit rolling deterministic replay; bootstrap retains the original chain until an old anchor exists, subject to the storage guard. Backups include the new tables; apply migrations before restoring their grants to a fresh PostgreSQL cluster. See docs/CEX_EXPERIMENTS.md for the exact read-only replay verification commands.

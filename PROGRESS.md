@@ -11,3 +11,8 @@ Actual verification and scientific limits are recorded in [release validation](d
 ## v1.2.1 — available-history display resolution
 
 Long Hyperliquid lookbacks retain five-minute detail while collected account history is short. As history grows, aggregation remains bounded to approximately 288 columns. A resolution change replaces the browser's full grid instead of mixing native and aggregated columns. Candles and snapshots use the same explicit UTC epoch. This changes presentation only; historical matrices, discovery, CEX inference and the forecast learner are unchanged.
+
+
+## v1.3.0 — separate CEX experiments
+
+Added the bounded CEX comparison worker, common hashed input ledger, exact restart/replay anchors, restricted-role source protection, optional narrow kernels and three separate sensitivity scenarios. Original remains the default. Hyperliquid mathematics and history and the prospective Bybit feature source are unchanged. See docs/CEX_EXPERIMENTS.md and docs/RELEASE_VALIDATION.md for assumptions and actual verification.

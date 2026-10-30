@@ -11,6 +11,8 @@ from app import learning
 from app import hyperliquid, hl_api
 from app.config import EXCHANGES,LEVERAGES,VERSION
 from app.model import decode_array,WEIGHTS
+from app.cex_scenarios import SCENARIOS,NORMALIZATION,significant_norm,version as scenario_version
+from app import cex_worker
 
 p=None
 learning_cache=(0,None)
@@ -24,7 +26,7 @@ async def lifespan(app):
     await p.close()
 
 
-app=FastAPI(title='BTC Liquidation Observatory',version='1.2.1',lifespan=lifespan)
+app=FastAPI(title='BTC Liquidation Observatory',version='1.3.0',lifespan=lifespan)
 
 
 def filters(exchanges,leverage):
@@ -39,14 +41,26 @@ def filters(exchanges,leverage):
 async def health():
     try:
         await p.fetchval('SELECT 1')
-        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='007')")
+        migrated=await p.fetchval("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='008')")
         return JSONResponse({'status':'ok' if migrated else 'starting'},status_code=200 if migrated else 503)
     except Exception:
         return JSONResponse({'status':'database_unavailable'},status_code=503)
 
 
-async def latest_profiles(ex,ks,bucket):
-    rows=await p.fetch('''SELECT DISTINCT ON(exchange) * FROM heatmap_snapshots WHERE exchange=ANY($1::text[]) AND model_version=$2 ORDER BY exchange,ts DESC''',ex,VERSION)
+def cex_selection(name):
+    if name=='baseline':return 'heatmap_snapshots','model_version',VERSION,300
+    if name not in SCENARIOS:raise HTTPException(422,'Unknown CEX model scenario')
+    return 'cex_snapshots','scenario',name,SCENARIOS[name].snapshot_seconds
+
+
+async def latest_profiles(ex,ks,bucket,cex_model='baseline'):
+    cex_selection(cex_model)
+    if cex_model=='baseline':
+        rows=await p.fetch('''SELECT DISTINCT ON(exchange) * FROM heatmap_snapshots WHERE exchange=ANY($1::text[]) AND model_version=$2 ORDER BY exchange,ts DESC''',ex,VERSION)
+    else:
+        rows=await p.fetch('''SELECT exchange,ts,matrix,(meta->'buckets'->>0)::float8 grid_start,
+          jsonb_array_length(meta->'buckets') grid_n,(meta->>'last_mark')::float8 mark
+          FROM cex_checkpoints WHERE exchange=ANY($1::text[]) AND scenario=$2''',ex,cex_model)
     marks=await p.fetch('SELECT * FROM live_marks WHERE exchange=ANY($1::text[])',ex)
     markmap={r['exchange']:r for r in marks}
     out={}
@@ -69,7 +83,7 @@ async def latest_profiles(ex,ks,bucket):
     return out,provenance
 
 
-async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str='',since:int|None=None):
+async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str='',since:int|None=None,cex_model:str='baseline'):
     periods={'24h':1,'3d':3,'7d':7,'14d':14,'30d':30}
     if lookback not in periods or bucket not in (25,50,100,200):
         raise HTTPException(422,'Supported lookbacks: 24h,3d,7d,14d,30d; buckets:25,50,100,200')
@@ -78,15 +92,17 @@ async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',levera
     except ValueError:
         raise HTTPException(422,'Invalid leverage')
     days=periods[lookback]
+    table,column,selector,cadence=cex_selection(cex_model)
     start=datetime.now(timezone.utc)-timedelta(days=days)
     if since is not None:
         try:
             start=max(start,datetime.fromtimestamp(since/1000,timezone.utc))
         except (ValueError,OverflowError,OSError):
             raise HTTPException(422,'Invalid since timestamp')
-    step=max(300,int(np.ceil(days*86400/288/300))*300)
-    rows=await p.fetch('''SELECT DISTINCT ON(exchange,time_bucket($1::interval,ts-interval '1 microsecond',TIMESTAMPTZ '1970-01-01')) * FROM heatmap_snapshots
-    WHERE exchange=ANY($2::text[]) AND ts>=$3 AND model_version=$4 ORDER BY exchange,time_bucket($1::interval,ts-interval '1 microsecond',TIMESTAMPTZ '1970-01-01'),ts DESC''',timedelta(seconds=step),ex,start,VERSION)
+    step=max(cadence,int(np.ceil(days*86400/288/300))*300)
+    # Identifiers come only from cex_selection's fixed allowlist; values remain parameters.
+    rows=await p.fetch(f'''SELECT DISTINCT ON(exchange,time_bucket($1::interval,ts-interval '1 microsecond',TIMESTAMPTZ '1970-01-01')) * FROM {table}
+    WHERE exchange=ANY($2::text[]) AND ts>=$3 AND {column}=$4 ORDER BY exchange,time_bucket($1::interval,ts-interval '1 microsecond',TIMESTAMPTZ '1970-01-01'),ts DESC''',timedelta(seconds=step),ex,start,selector)
     times=sorted({(int(r['ts'].timestamp())-1)//step*step for r in rows})
     time_index={t:i for i,t in enumerate(times)}
     side_totals=np.zeros((len(times),2))
@@ -113,7 +129,7 @@ async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',levera
         xi,yi=np.nonzero(dense>=1)
         values=np.round(dense[xi,yi],2)
         matrix=list(map(list,zip(xi.tolist(),yi.tolist(),values.tolist())))
-        norm=float(np.percentile(values,98)) if len(values) else 1.
+        norm=significant_norm(values)
     else:
         prices=[];matrix=[];norm=1.
     # Use a single reference venue's OHLC; do not invent cross-venue candles.
@@ -123,16 +139,18 @@ async def build_heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',levera
     cs=[[int((r['t'].timestamp()+step)*1000),r['o'],r['c'],r['l'],r['h']] for r in candles]
     # Heatmap timestamp is end-of-bucket (candle end); align both without index interpolation.
     display_times=[(t+step)*1000 for t in times]
-    profile,provenance=await latest_profiles(ex,ks,bucket)
+    profile,provenance=await latest_profiles(ex,ks,bucket,cex_model)
     ps=sorted(profile)
     cumlong=np.cumsum([profile[x][0] for x in reversed(ps)])[::-1] if ps else []
     cumshort=np.cumsum([profile[x][1] for x in ps]) if ps else []
     profiles=[{'price':x,'long_usd':round(profile[x][0],2),'short_usd':round(profile[x][1],2),'cumulative_long_usd':round(float(cumlong[i]),2),'cumulative_short_usd':round(float(cumshort[i]),2)} for i,x in enumerate(ps)]
     clld=[{'ts':(t+step)*1000,'long_usd':float(v[0]),'short_usd':float(v[1]),'usd':float(v[0]-v[1]),'normalized':float((v[0]-v[1])/max(1,v.sum()))} for t,v in zip(times,side_totals)]
     mark=float(np.mean([v['mark'] for v in provenance])) if provenance else await p.fetchval('SELECT avg(price) FROM live_marks WHERE exchange=ANY($1::text[])',ex)
-    return {'source':'cex','model_version':VERSION,'estimated':True,'incremental':since is not None,'times':display_times,'prices':prices,'matrix':matrix,
+    candidate_health=[dict(r) for r in await p.fetch('SELECT exchange,last_ts,status,detail,updated_at FROM cex_runs WHERE exchange=ANY($1::text[])',ex)] if cex_model!='baseline' else []
+    return {'source':'cex','cex_model':cex_model,'cex_health':candidate_health,'model_version':VERSION if cex_model=='baseline' else scenario_version(cex_model),'estimated':True,'incremental':since is not None,'times':display_times,'prices':prices,'matrix':matrix,
             'candles':cs,'candle_exchange':candle_exchange,'profile':profiles,'clld':clld,'mark':mark,
-            'normalization_p98':norm,'time_resolution_s':step,'bucket':bucket,'provenance':provenance,
+            'normalization_p98':norm,'normalization':NORMALIZATION,'time_resolution_s':step,'bucket':bucket,'provenance':provenance,
+            'history_sampling':'Original stored states' if cex_model=='baseline' else '5m for latest 7d; older narrow states 15m; reference/alternatives hourly; exact batch anchors retained',
             'uncertainty':{'status':'uncalibrated','alpha_prior_range':[.01,.15],'interval_type':'unidentified private positions; no calibrated confidence interval'},
             'coverage_note':'No synthetic history. Empty ranges mean missing native OI or feeds. Historical time columns use last state per display interval.'}
 
@@ -141,14 +159,14 @@ _heatmap_lock=asyncio.Lock()
 _heatmap_cache={}
 
 @app.get('/api/v1/heatmap')
-async def heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str='',since:int|None=None,source:str='cex'):
+async def heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str='',since:int|None=None,source:str='cex',cex_model:str='baseline'):
     if source not in ('cex','hyperliquid'): raise HTTPException(422,'Unknown source')
-    if source=='hyperliquid' and (exchanges or leverage): raise HTTPException(422,'CEX exchange/leverage assumptions do not apply to reported Hyperliquid positions')
-    key=(source,lookback,bucket,exchanges,leverage,since,int(time.monotonic()//15))
+    if source=='hyperliquid' and (exchanges or leverage or cex_model!='baseline'): raise HTTPException(422,'CEX filters/scenarios do not apply to reported Hyperliquid positions')
+    key=(source,lookback,bucket,exchanges,leverage,since,cex_model,int(time.monotonic()//15))
     async with _heatmap_lock:
         if _heatmap_cache.get('key')==key:
             return _heatmap_cache['response']
-        result=await hl_api.build(p,lookback,bucket,since) if source=='hyperliquid' else await build_heatmap(lookback,bucket,exchanges,leverage,since)
+        result=await hl_api.build(p,lookback,bucket,since) if source=='hyperliquid' else await build_heatmap(lookback,bucket,exchanges,leverage,since,cex_model)
         _heatmap_cache.clear()
         response=JSONResponse(jsonable_encoder(result))
         _heatmap_cache.update(key=key,response=response)
@@ -156,19 +174,19 @@ async def heatmap(lookback:str='24h',bucket:int=25,exchanges:str='',leverage:str
 
 
 @app.get('/api/v1/magnets')
-async def magnets(limit:int=Query(5,ge=1,le=20),bucket:int=100,exchanges:str='',leverage:str='',source:str='cex'):
+async def magnets(limit:int=Query(5,ge=1,le=20),bucket:int=100,exchanges:str='',leverage:str='',source:str='cex',cex_model:str='baseline'):
     if bucket not in (25,50,100,200):
         raise HTTPException(422,'Unsupported bucket')
     if source not in ('cex','hyperliquid'): raise HTTPException(422,'Unknown source')
     if source=='hyperliquid':
-        if exchanges or leverage: raise HTTPException(422,'CEX filters do not apply to Hyperliquid')
+        if exchanges or leverage or cex_model!='baseline': raise HTTPException(422,'CEX filters/scenarios do not apply to Hyperliquid')
         profile,prov,_,_=await hl_api.latest(p,bucket)
     else:
         try:
             ex,ks=filters(exchanges,leverage)
         except ValueError:
             raise HTTPException(422,'Invalid leverage')
-        profile,prov=await latest_profiles(ex,ks,bucket)
+        profile,prov=await latest_profiles(ex,ks,bucket,cex_model)
     if not profile:
         return {'source':source,'estimated':source=='cex','sampled':source=='hyperliquid','zones':[]}
     prices=sorted(profile)
@@ -202,7 +220,7 @@ async def diagnostics():
     recent=await p.fetch('SELECT ts,exchange,side,usd,price_semantics FROM observed_liquidations ORDER BY ts DESC LIMIT 10')
     health={r['exchange']:{'last_ts':r['ts'],'lag_s':max(0,time.time()-r['ts'].timestamp()),'steps':r['meta'].get('steps',0)} for r in cps}
     return {'model_version':VERSION,'estimated':True,'model_health':health,'calibration':{'alpha':.04,'bounds':[.01,.15],'status':'frozen pending independent out-of-sample validation','history_latest':[dict(x) for x in calibrations]},
-            'learning':await learning_status(),'hyperliquid':await hyperliquid.status(p),
+            'learning':await learning_status(),'hyperliquid':await hyperliquid.status(p),'cex_experiments':await cex_worker.status(p),
             'leverage_weights':{'prior':dict(zip(LEVERAGES,WEIGHTS.tolist())),'okx_125x':'unsupported: weight zero, others renormalized','effective_parameters_table':'leverage_parameters'},
             'coverage':[dict(x) for x in feeds],'candle_gaps':[dict(x) for x in gaps],'open_interest':[dict(x) for x in oi],
             'observed_liquidations':[dict(x) for x in counts],'recent_liquidations':[dict(x) for x in recent],
@@ -219,6 +237,11 @@ async def learning_status():
     value=await learning.summary(p)
     learning_cache=(time.monotonic(),value)
     return value
+
+
+@app.get('/api/v1/cex/models')
+async def cex_models():
+    return await cex_worker.status(p)
 
 
 @app.websocket('/ws/stream')

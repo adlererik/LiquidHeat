@@ -22,7 +22,7 @@ function poolRaster(points,times,prices,step,bucket,maxRows){
  return {firstTime,lastTime,lowPrice,highPrice,nx,ny,nativeRows,values,peak};
 }
 function selected(id){return [...$(id).querySelectorAll('input:checked')].map(x=>x.value);}
-function query(){return new URLSearchParams({lookback,bucket:$('bucket').value,source,...(source==='cex'?{exchanges:selected('exchange-filters').join(','),leverage:selected('leverage-filters').join(',')}:{})});}
+function query(){return new URLSearchParams({lookback,bucket:$('bucket').value,source,...(source==='cex'?{exchanges:selected('exchange-filters').join(','),leverage:selected('leverage-filters').join(','),cex_model:$('cex-model').value}:{})});}
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),6000);}
 function zoomRange(start,end,factor,anchor,minSpan=.01){
  const span=Math.max(minSpan,Math.min(100,(end-start)*factor));
@@ -143,6 +143,12 @@ function summary(){
  if(!data)return;const long=data.profile.reduce((s,r)=>s+r.long_usd,0),short=data.profile.reduce((s,r)=>s+r.short_usd,0);
  $('long').textContent=money(long);$('short').textContent=money(short);$('clld').textContent=money(long-short);$('clld').style.color=long>=short?'#86d8c1':'#efa5a2';
  $('mark').textContent=price(data.mark);$('metric-mark').textContent=price(data.mark);$('p98').textContent=money(data.normalization_p98);
+ $('normalization-label').textContent=source==='cex'&&data.normalization?.method==='significant-p98.5'?'98.5th · significant cells':'98th percentile';
+ if(source==='cex'){
+  const health=data.cex_health||[],paused=health.find(r=>r.status==='paused');
+  const replay=data.cex_model!=='baseline'&&(!health.length||health.some(r=>Date.now()/1000-r.last_ts>900));
+  $('source-description').textContent=$('cex-model').selectedOptions[0].textContent+' · '+(paused?'PAUSED: '+paused.detail:replay?'Replay in progress · historical candidate data':'uncalibrated scenario · private positions inferred');
+ }
  $('candle-source').textContent=data.candle_exchange[0].toUpperCase()+data.candle_exchange.slice(1);
  $('resolution').textContent=`UTC · ${data.time_resolution_s/60}m display · $${data.bucket} buckets`;
  const latest=data.provenance.map(p=>p.mark_ts).filter(Boolean).sort().at(-1);$('asof').textContent=latest?'Mark '+new Date(latest).toLocaleTimeString('en-GB',{timeZone:'UTC',hour12:false})+' UTC':'No live mark yet';
@@ -170,6 +176,7 @@ function learningView(d){
 }
 function mergeIncremental(old,part){
  if(old.time_resolution_s!==part.time_resolution_s)throw Error('Time resolution changed; a full refresh is required.');
+ if(old.cex_model!==part.cex_model)throw Error('CEX model changed; a full refresh is required.');
  const days={'24h':1,'3d':3,'7d':7,'14d':14,'30d':30}[lookback],cutoff=Date.now()-days*86400000;
  const times=[...new Set([...old.times,...part.times])].filter(t=>t>=cutoff).sort((a,b)=>a-b),prices=[...new Set([...old.prices,...part.prices])].sort((a,b)=>a-b);
  const ti=new Map(times.map((v,i)=>[v,i])),pi=new Map(prices.map((v,i)=>[v,i])),replace=new Set(part.times);
@@ -177,8 +184,11 @@ function mergeIncremental(old,part){
  for(const r of old.matrix){const t=old.times[r[0]];if(ti.has(t)&&!replace.has(t))matrix.push([ti.get(t),pi.get(old.prices[r[1]]),r[2]]);}
  for(const r of part.matrix){const t=part.times[r[0]];if(ti.has(t))matrix.push([ti.get(t),pi.get(part.prices[r[1]]),r[2]]);}
  const mergeSeries=(a,b,key)=>[...new Map([...a,...b].filter(r=>key(r)>=cutoff).map(r=>[key(r),r])).values()].sort((a,b)=>key(a)-key(b));
- const values=matrix.map(r=>r[2]).sort((a,b)=>a-b),at=(values.length-1)*.98,lo=Math.max(0,Math.floor(at)),hi=Math.max(0,Math.ceil(at));
- const norm=values.length?values[lo]+(values[hi]-values[lo])*(at-lo):1;
+ const values=matrix.map(r=>r[2]).sort((a,b)=>a-b);
+ const significant=part.source==='cex'&&part.normalization?.method==='significant-p98.5';
+ const scale=significant?values.filter(v=>v>=values.at(-1)*.01&&Number.isFinite(v)&&v>0):values;
+ const at=(scale.length-1)*(significant ? .985 : .98),lo=Math.max(0,Math.floor(at)),hi=Math.max(0,Math.ceil(at));
+ const norm=scale.length?Math.max(significant?1:0,scale[lo]+(scale[hi]-scale[lo])*(at-lo)):1;
  return {...part,times,prices,matrix,candles:mergeSeries(old.candles,part.candles,r=>r[0]),clld:mergeSeries(old.clld,part.clld,r=>r.ts),normalization_p98:norm};
 }
 async function refresh(incremental=false){
@@ -188,7 +198,7 @@ async function refresh(incremental=false){
  if(delta)q.set('since',String(data.times.at(-1)-data.time_resolution_s*1000));
  try{let r=await fetch('/api/v1/heatmap?'+q);if(!r.ok)throw Error(`Heatmap API ${r.status}`);let part=await r.json();if(query().toString()!==scope){pendingRefresh=true;return;}
   let merge=delta;
-  if(delta&&data.time_resolution_s!==part.time_resolution_s){
+  if(delta&&(data.time_resolution_s!==part.time_resolution_s||data.cex_model!==part.cex_model)){
    // Growing history can change aggregation. Replace the whole grid so native
    // and coarser columns are never mixed or counted twice.
    q.delete('since');r=await fetch('/api/v1/heatmap?'+q);if(!r.ok)throw Error(`Heatmap API ${r.status}`);part=await r.json();merge=false;
@@ -199,8 +209,18 @@ async function refresh(incremental=false){
  finally{refreshing=false;if(pendingRefresh){pendingRefresh=false;setTimeout(()=>refresh(true),1000);}}
 }
 async function magnets(){try{const scope=query().toString(),q=query();q.set('bucket','100');q.set('limit','5');const r=await fetch('/api/v1/magnets?'+q);if(!r.ok)return;const m=await r.json();if(scope!==query().toString())return;const root=$('magnet-list');root.replaceChildren();for(const [i,z] of m.zones.entries()){const el=document.createElement('div');el.className='magnet';const sm=document.createElement('small');sm.textContent=`0${i+1} / ${source==='hyperliquid'?(z.side==='long'?'LONG POSITIONS':'SHORT POSITIONS'):(z.side==='long'?'LONGS BELOW':'SHORTS ABOVE')}`;const b=document.createElement('b');b.textContent=price(z.price);const span=document.createElement('span');span.textContent=money(z.usd)+' · '+(z.distance_pct>=0?'+':'')+z.distance_pct.toFixed(2)+'%';const bar=document.createElement('div');bar.className='bar';const fill=document.createElement('i');fill.style.width=(z.intensity*100)+'%';bar.append(fill);const em=document.createElement('em');em.textContent='Z-score '+z.z_score.toFixed(2);el.append(sm,b,span,bar,em);root.append(el);}if(!m.zones.length)root.textContent=source==='hyperliquid'?'No fresh reported liquidation thresholds in the current sample.':'Model is warming up; no exposure is seeded.';}catch{}}
-async function diagnostics(show=false){try{const r=await fetch('/api/v1/diagnostics');if(!r.ok)throw Error('Diagnostics unavailable');const d=await r.json();learningView(d.learning);$('diagnostic-json').textContent=JSON.stringify(d,null,2);const models=Object.values(d.model_health);const live=models.filter(x=>x.lag_s<900).length;$('coverage').textContent=live+' / 3 models current';$('coverage-sub').textContent='Public feeds · structural priors';if(source==='hyperliquid')sampleSummary(d.hyperliquid);const root=$('diagnostic-summary');root.replaceChildren();for(const f of d.coverage){const row=document.createElement('div');row.className='diag-feed';const a=document.createElement('span');a.textContent=f.exchange+' / '+f.feed;const b=document.createElement('b');b.textContent=f.status;b.className=['live','healthy','available'].includes(f.status)?'':'warn';row.append(a,b);root.append(row);}if(source==='cex'&&data&&Date.now()-lastFetch>30000&&selected('exchange-filters').some(ex=>{const h=d.model_health[ex],v=data.provenance.find(p=>p.exchange===ex);return h&&(!v||Date.parse(h.last_ts)>Date.parse(v.snapshot_ts));}))refresh(true);if(show)$('detail').showModal();}catch(e){if(show)toast(e.message);}}
+// Coalesce bursts (especially liquidation events) without changing either model.
+let diagnosticRequest=null,lastDiagnosticRequest=0;
+function diagnostics(show=false){
+ if(diagnosticRequest)return diagnosticRequest.then(ok=>{if(show&&ok)$('detail').showModal();});
+ if(!show&&Date.now()-lastDiagnosticRequest<5000)return Promise.resolve(false);
+ lastDiagnosticRequest=Date.now();
+ diagnosticRequest=loadDiagnostics(show).finally(()=>{diagnosticRequest=null;});
+ return diagnosticRequest;
+}
+async function loadDiagnostics(show=false){try{const r=await fetch('/api/v1/diagnostics');if(!r.ok)throw Error('Diagnostics unavailable');const d=await r.json();learningView(d.learning);$('diagnostic-json').textContent=JSON.stringify(d,null,2);const models=Object.values(d.model_health);const live=models.filter(x=>x.lag_s<900).length;$('coverage').textContent=live+' / 3 models current';$('coverage-sub').textContent='Public feeds · structural priors';if(source==='hyperliquid')sampleSummary(d.hyperliquid);const root=$('diagnostic-summary');root.replaceChildren();for(const f of d.coverage){const row=document.createElement('div');row.className='diag-feed';const a=document.createElement('span');a.textContent=f.exchange+' / '+f.feed;const b=document.createElement('b');b.textContent=f.status;b.className=['live','healthy','available'].includes(f.status)?'':'warn';row.append(a,b);root.append(row);}if(source==='cex'&&data&&Date.now()-lastFetch>30000&&selected('exchange-filters').some(ex=>{const h=d.model_health[ex],v=data.provenance.find(p=>p.exchange===ex);return h&&(!v||Date.parse(h.last_ts)>Date.parse(v.snapshot_ts));}))refresh(true);if(show)$('detail').showModal();return true;}catch(e){if(show)toast(e.message);return false;}}
 function websocket(){const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/stream');ws.onopen=()=>{$('connection').textContent='Live transport';$('connection-dot').className='live';};ws.onmessage=e=>{const m=JSON.parse(e.data);if(source==='hyperliquid'){if(m.type==='hyperliquid'){if(Date.now()-lastFetch>5000)refresh(true);diagnostics();}if(m.type==='mark'&&m.data.exchange==='hyperliquid'){$('mark').textContent=price(m.data.price);$('asof').textContent='Hyperliquid mark · '+new Date(m.data.ts).toLocaleTimeString('en-GB',{timeZone:'UTC',hour12:false})+' UTC';}if(m.type==='learning')diagnostics();return;}if(m.data?.exchange==='hyperliquid'||m.type==='hyperliquid')return;if(m.type==='mark'&&selected('exchange-filters').includes(m.data.exchange)){const d=m.data;$('asof').textContent=d.exchange+' mark · '+new Date(d.ts).toLocaleTimeString('en-GB',{timeZone:'UTC',hour12:false})+' UTC';$('mark').textContent=price(d.price);}
+ if(m.type==='profile'&&$('cex-model').value!=='baseline')return;
  if(m.type==='heatmap'&&Date.now()-lastFetch>30000)refresh(true);
  if(m.type==='liquidation')diagnostics();
  if(m.type==='learning')diagnostics();
@@ -211,6 +231,7 @@ function websocket(){const ws=new WebSocket((location.protocol==='https:'?'wss:/
  };ws.onclose=()=>{$('connection').textContent='Reconnecting';$('connection-dot').className='';setTimeout(websocket,5000);};ws.onerror=()=>ws.close();}
 $('lookbacks').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;lookback=b.dataset.value;for(const x of $('lookbacks').children)x.classList.toggle('selected',x===b);liveProfiles={};refresh();});
 for(const id of ['bucket','exchange-filters','leverage-filters'])$(id).addEventListener('change',e=>{if(id!=='bucket'&&!selected(id).length){e.target.checked=true;toast('Select at least one '+(id==='exchange-filters'?'exchange':'leverage tier')+'.');return;}liveProfiles={};refresh();});
+$('cex-model').addEventListener('change',()=>{liveProfiles={};refresh();});
 $('threshold').addEventListener('input',()=>{$('threshold-value').value=$('threshold').value+'%';chartData();});$('mark-overlay').addEventListener('change',chartData);$('profile-mode').onclick=()=>{cumulative=!cumulative;$('profile-mode').textContent=cumulative?'Cumulative ⇄ Bands':'Bands ⇄ Cumulative';$('profile-mode').setAttribute('aria-pressed',String(cumulative));chartData();};
 $('fit-liquidity').onclick=()=>{if(data){chart.dispatchAction({type:'dataZoom',dataZoomId:PRICE_ZOOM,start:0,end:100});recordViewport();}};
 $('fit-price').onclick=()=>fitPrice();$('reset-view').onclick=()=>fitPrice(true);
@@ -242,6 +263,7 @@ function sampleSummary(s){
 function sourceView(){
  const hl=source==='hyperliquid';
  $('discovery-panel').hidden=!hl;
+ $('cex-model-control').hidden=hl;
  $('exchange-filters').hidden=hl;$('leverage-filters').hidden=hl;$('reported-filters').hidden=!hl;
  $('method-badge').textContent=hl?'REPORTED · SAMPLED':'ESTIMATED';$('instrument-name').textContent=hl?'BTC / USDC':'BTC / USDT';$('mark-venue').textContent=hl?'HYPERLIQUID':'VENUE MEAN';
  $('method-heading').textContent=hl?'Reported Hyperliquid liquidation thresholds, sampled from public accounts.':'Estimated exposure from public Binance, Bybit and OKX market data.';
