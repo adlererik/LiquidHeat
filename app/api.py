@@ -26,7 +26,7 @@ async def lifespan(app):
     await p.close()
 
 
-app=FastAPI(title='BTC Liquidation Observatory',version='1.3.0',lifespan=lifespan)
+app=FastAPI(title='BTC Liquidation Observatory',version='1.3.1',lifespan=lifespan)
 
 
 def filters(exchanges,leverage):

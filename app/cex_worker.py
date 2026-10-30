@@ -166,11 +166,23 @@ async def advance(c,exchange):
 
 async def retain(c):
     """Retain real coarse history and an exact replay anchor before ledger expiry."""
-    # Older lookbacks already render at >=35m. Preserve native recent detail;
-    # keep checkpoint anchors even where the rest of the history is decimated.
-    await c.execute("""DELETE FROM cex_snapshots WHERE ctid IN (
-      SELECT ctid FROM cex_snapshots WHERE scenario='sharp' AND ts<now()-interval '7 days'
-      AND mod(extract(epoch FROM ts)::bigint,900)<>0 AND NOT(audit ? 'checkpoint_meta') LIMIT 3000)""")
+    # Live batches often contain one interval: retaining every batch anchor would
+    # silently turn all hourly alternatives into five-minute storage. Keep the
+    # first complete anchor per venue/UTC six-hour window plus ordinary cadence.
+    # Select whole timestamps so the bounded deletion cannot split an anchor set.
+    await c.execute("""WITH keep AS MATERIALIZED (
+      SELECT DISTINCT ON(exchange,floor(extract(epoch FROM ts)/21600)) exchange,ts
+      FROM cex_snapshots WHERE scenario='reference' AND audit ? 'checkpoint_meta'
+      ORDER BY exchange,floor(extract(epoch FROM ts)/21600),ts
+    ), doomed AS (
+      SELECT DISTINCT s.exchange,s.ts FROM cex_snapshots s WHERE
+       ((s.scenario='sharp' AND s.ts<now()-interval '7 days' AND mod(extract(epoch FROM s.ts)::bigint,900)<>0)
+        OR (s.scenario<>'sharp' AND mod(extract(epoch FROM s.ts)::bigint,3600)<>0))
+       AND NOT EXISTS(SELECT 1 FROM keep k WHERE k.exchange=s.exchange AND k.ts=s.ts)
+      ORDER BY s.ts,s.exchange LIMIT 600
+    ) DELETE FROM cex_snapshots s USING doomed d WHERE s.exchange=d.exchange AND s.ts=d.ts AND
+      ((s.scenario='sharp' AND s.ts<now()-interval '7 days' AND mod(extract(epoch FROM s.ts)::bigint,900)<>0)
+       OR (s.scenario<>'sharp' AND mod(extract(epoch FROM s.ts)::bigint,3600)<>0))""")
     for ex in EXCHANGES:
         anchor=await c.fetchval("""SELECT max(ts) FROM cex_snapshots WHERE exchange=$1 AND scenario='reference'
           AND ts<=now()-interval '36 days' AND audit ? 'checkpoint_meta'""",ex)

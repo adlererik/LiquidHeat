@@ -109,6 +109,20 @@ async def main():
         assert await p.fetchval('SELECT count(*) FROM cex_snapshots WHERE ts=$1',anchor_time)==len(SCENARIOS)
         assert not await p.fetchval('SELECT EXISTS(SELECT 1 FROM cex_inputs WHERE ts<$1)',anchor_time)
         print('PASS bounded research retention preserves exact replay anchors',flush=True)
+        # Simulate single-interval live batches, where every interval is an
+        # encoded checkpoint. Cadence thinning must preserve complete anchors.
+        for age in (1,8):
+            base=datetime.fromtimestamp((int(time.time())-age*86400)//21600*21600,timezone.utc)
+            for minute in (5,10,15,60):
+                for scenario in SCENARIOS:
+                    await p.execute('INSERT INTO cex_snapshots VALUES($1,$2,$3,40000,1,80000,$4,$5)',
+                      base+timedelta(minutes=minute),'binance',scenario,matrix,
+                      {'checkpoint_meta':{'steps':0},'chain_digest':''})
+            await cex_worker.retain(restricted)
+            for minute,expected in ((5,5),(10,1 if age==1 else 0),(15,1),(60,5)):
+                assert await p.fetchval('SELECT count(*) FROM cex_snapshots WHERE ts=$1 AND exchange=$2',
+                  base+timedelta(minutes=minute),'binance')==expected,(age,minute)
+        print('PASS live-batch anchor thinning preserves complete six-hour anchors and native/hourly cadence',flush=True)
         print('ALL CEX RESEARCH CHECKS PASSED',flush=True)
     finally:
         if restricted:await restricted.close()

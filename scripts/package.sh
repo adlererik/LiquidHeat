@@ -9,9 +9,9 @@ stage=$(mktemp -d "$PWD/dist/package.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 mkdir "$stage/LiquidHeat"
 git archive HEAD | tar -x -C "$stage/LiquidHeat"
-docker image inspect liquidheat-app:1.3.0 liquidheat-web:1.3.0 liquidheat-timescale:2.19.3-pg16 >/dev/null
-docker save liquidheat-app:1.3.0 liquidheat-web:1.3.0 liquidheat-timescale:2.19.3-pg16 | gzip -1 > "$stage/LiquidHeat/docker-images-linux-amd64.tar.gz"
+docker image inspect liquidheat-app:1.3.1 liquidheat-web:1.3.1 liquidheat-timescale:2.19.3-pg16 >/dev/null
+docker save liquidheat-app:1.3.1 liquidheat-web:1.3.1 liquidheat-timescale:2.19.3-pg16 | gzip -1 > "$stage/LiquidHeat/docker-images-linux-amd64.tar.gz"
 (cd "$stage/LiquidHeat" && sha256sum docker-images-linux-amd64.tar.gz > IMAGE-SHA256SUMS)
-tar -czf dist/LiquidHeat-v1.3.0-linux-amd64.tar.gz -C "$stage" LiquidHeat
-(cd dist && sha256sum LiquidHeat-v1.3.0-linux-amd64.tar.gz > SHA256SUMS)
+tar -czf dist/LiquidHeat-v1.3.1-linux-amd64.tar.gz -C "$stage" LiquidHeat
+(cd dist && sha256sum LiquidHeat-v1.3.1-linux-amd64.tar.gz > SHA256SUMS)
 echo 'Created Docker release bundle and SHA256SUMS in dist/'

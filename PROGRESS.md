@@ -16,3 +16,8 @@ Long Hyperliquid lookbacks retain five-minute detail while collected account his
 ## v1.3.0 — separate CEX experiments
 
 Added the bounded CEX comparison worker, common hashed input ledger, exact restart/replay anchors, restricted-role source protection, optional narrow kernels and three separate sensitivity scenarios. Original remains the default. Hyperliquid mathematics and history and the prospective Bybit feature source are unchanged. See docs/CEX_EXPERIMENTS.md and docs/RELEASE_VALIDATION.md for assumptions and actual verification.
+
+
+## v1.3.1 — live checkpoint retention
+
+Corrected extra-anchor storage under single-interval live batches. Whole-timestamp thinning preserves complete periodic replay anchors and ordinary native/hourly history. Added a recent-anchor read-only verifier. No mathematical model or Hyperliquid/learning history changed.

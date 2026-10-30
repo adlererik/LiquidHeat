@@ -42,3 +42,8 @@ The fifth service uses at most 256 MiB/0.50 CPU and one normal SQL connection. I
 Live deployed checks passed every lookback with all four bucket sizes represented, every filtered alternative, zero OKX 125x allocation, source/scenario rejection and finite magnet scores. Four simultaneous test WebSockets delivered real candle/mark/profile messages while HTTP diagnostics and health remained available. The project proxy now counts HTTP and WebSocket connections separately at the existing six/four per-client ceilings. Browser diagnostics coalesce event bursts with one in-flight request and a five-second background throttle; explicit inspection remains available.
 
 Four resource samples before release packaging retained at least 2,256 MiB available host RAM and 7.91 GiB free disk. The last sample used approximately 403.5 MiB database, 138.8 MiB original engine, 112.2 MiB API, 41.3 MiB comparison worker and 2.7 MiB frontend. These are short observations, not a sustained-load guarantee.
+
+
+## v1.3.1 retention correction
+
+Live one-interval batches were retaining too many checkpoint anchors. This could make the optional CEX comparisons reach their storage guard early. Retention now preserves regular five-minute/15-minute/hourly cadence plus complete periodic anchors, deleting redundant anchors by whole timestamp groups. Kernel mathematics, Original weights/decay, captured inputs, Hyperliquid and prospective Bybit learning are unchanged. The correction uses the same migration 008 and model versions; no model reset is needed.
