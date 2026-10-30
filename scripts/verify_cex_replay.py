@@ -22,6 +22,11 @@ async def main(recent=False):
                 if fresh:
                     seed_before=datetime.now(timezone.utc)-timedelta(hours=6) if recent else datetime.now(timezone.utc)-timedelta(days=35)
                     anchor=await c.fetchval("SELECT max(ts) FROM cex_snapshots WHERE exchange=$1 AND scenario='reference' AND ts<=$2 AND audit ? 'checkpoint_meta'",ex,seed_before)
+                    if recent and not anchor:
+                        # A newly upgraded worker has not recorded six hours of
+                        # anchors yet. Never silently repeat the full month.
+                        anchor=await c.fetchval("SELECT min(ts) FROM cex_snapshots WHERE exchange=$1 AND scenario='reference' AND audit ? 'checkpoint_meta'",ex)
+                        if not anchor:raise RuntimeError('Recent verification requires a recorded checkpoint anchor: '+ex)
                     if anchor:
                         seeds=await c.fetch('SELECT * FROM cex_snapshots WHERE exchange=$1 AND ts=$2',ex,anchor)
                         assert len(seeds)==len(SCENARIOS)
@@ -51,15 +56,15 @@ async def main(recent=False):
                             state.exposure=np.asarray(state.exposure,dtype='<f4').astype(np.float64)
                     w['count']+=1;w['replayed']+=1;processed+=1
                     await asyncio.sleep(0)
-                if w['count']//1000>announced.get(ex,0):
-                    announced[ex]=w['count']//1000;print(ex,w['count'],'inputs verified',flush=True)
+                if w['replayed']//1000>announced.get(ex,0):
+                    announced[ex]=w['replayed']//1000;print(ex,w['replayed'],'inputs replayed this run',flush=True)
                 if w['target'] and w['last']==limit:
                     fixed,saved=w['target'];assert w['count']==fixed['inputs'] and w['chain']==fixed['input_digest']
                     for name,state in w['states'].items():
                         np.testing.assert_array_equal(state.exposure,decode_array(saved[name]['matrix'],state.exposure.shape))
                         assert state.last_ts==int(saved[name]['ts'].timestamp())
                     w['done']=True;result=dict(exchange=ex,inputs=w['count'],replayed_inputs=w['replayed'],seed_ts=w['seed'],scenarios=len(w['states']),exact_checkpoint_match=True)
-                    report.append(result);print('PASS full frozen-input replay',result,flush=True)
+                    report.append(result);print('PASS checkpoint-seeded replay' if w['seed'] else 'PASS full frozen-input replay',result,flush=True)
             if not processed:await asyncio.sleep(5)
         print(json.dumps(dict(passed=True,venues=report,seconds=round(time.monotonic()-begin,2))),flush=True)
     finally:await c.close()
